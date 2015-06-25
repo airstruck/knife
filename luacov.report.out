@@ -1,0 +1,822 @@
+
+==============================================================================
+./knife/base.lua
+==============================================================================
+   1	return {
+    	    extend = function (self, subtype)
+  36	        return setmetatable(subtype or {}, {
+  18	            __index = self, 
+    	            __call = function (self, ...)
+   8	                local instance = setmetatable({}, { __index = self }) 
+   8	                return instance, instance:constructor(...)
+    	            end 
+  18	        })
+    	    end,
+   5	    constructor = function () end,
+   1	}
+    	
+
+==============================================================================
+./knife/ecs.lua
+==============================================================================
+   1	local ecs = {}
+    	
+   1	local cache = setmetatable({}, { __mode = 'k' })
+    	
+   1	ecs.forward = pairs
+    	
+   1	function ecs.reverse (list)
+    	    local function reverse (list, index)
+   3	        if index <= 1 then return end
+   2	        index = index - 1
+   2	        return index, list[index]
+    	    end
+    	    
+   1	    return reverse, list, #list + 1
+    	end
+    	
+    	local function extractComponent (context, entity, aspect) 
+  44	    return context[aspect] or entity[aspect]
+    	end
+    	
+    	local function extractComponents (context, entity, aspects) 
+  22	    local components = {}
+    	    
+  66	    for index, aspect in pairs(aspects) do
+  44	        local component = extractComponent(context, entity, aspect) 
+  44	        if not component then return end
+  44	        components[index] = component
+    	    end
+    	    
+  22	    return components
+    	end
+    	
+    	local function extractComponentsList (entities, aspects, iterator) 
+  14	    local cached = cache[entities]
+    	    
+  14	    if not iterator then
+  12	        iterator = ecs.forward
+    	    end
+    	    
+  14	    if cached and cached[aspects] and cached[aspects][iterator] then 
+   3	        return cached[aspects][iterator]
+    	    end
+    	    
+  11	    local list = {}
+  11	    local context = { _entities = entities }
+    	    
+  33	    for index, entity in iterator(entities) do
+  22	        context._index = index
+  22	        context._entity = entity
+  22	        list[#list + 1] = extractComponents(context, entity, aspects)
+    	    end
+    	    
+  11	    if cached then
+   7	        if cached[aspects] then
+   1	            cached[aspects][iterator] = list
+    	        else
+  12	            cached[aspects] = setmetatable({ [iterator] = list },
+  12	                { __mode = 'k' })
+    	        end 
+    	    end
+    	    
+  11	    return list
+    	end
+    	
+    	local function unpackArgs (list, index, ...)
+  84	    if index > #list then
+  28	        return ... 
+    	    end
+    	    
+  56	    return list[index], unpackArgs(list, index + 1, ...)
+    	end
+    	
+    	local function traverse (entities, aspects, iterator, process, ...)
+  14	    local componentsList = extractComponentsList(entities, aspects, iterator)
+    	    
+  42	    for index, components in pairs(componentsList) do
+  28	        process(unpackArgs(components, 1, ...))
+    	    end
+    	    
+  14	    return context
+    	end
+    	
+   1	function ecs.each (entities, aspects, iterator, process, ...) 
+   2	    if process then
+   1	        return traverse(entities, aspects, iterator, process, ...) 
+    	    else 
+   2	        return coroutine.wrap(function ()
+   1	            traverse(entities, aspects, iterator, coroutine.yield)
+    	        end)
+    	    end
+    	end
+    	
+   1	function ecs.system (aspects, process, iterator)
+    	    return function (entities, ...)
+  12	        return traverse(entities, aspects, iterator, process, ...)
+    	    end
+    	end
+    	
+   1	function ecs.cache (entities)
+   7	    cache[entities] = setmetatable({}, { __mode = 'k' })
+    	end
+    	
+   1	function ecs.invalidate (entities)
+   1	    if cache[entities] then
+   1	        ecs.cache (entities)
+    	    end
+    	end
+    	
+   1	function ecs.uncache (entities)
+   1	    cache[entities] = nil
+    	end
+    	
+   1	local entityMaxId = 0
+    	
+   1	ecs.entities = setmetatable({}, { __mode = 'v' })
+    	
+   2	ecs.ids = setmetatable({}, { 
+   1	    __mode = 'k', 
+    	    __index = function(self, entity) 
+   3	        entityMaxId = entityMaxId + 1
+   3	        self[entity] = entityMaxId
+   3	        ecs.entities[entityMaxId] = entity
+   3	        return entityMaxId
+    	    end
+   1	})
+    	
+   1	return ecs
+    	
+
+==============================================================================
+./knife/memoize.lua
+==============================================================================
+   1	local unpack = table.unpack or _G.unpack
+   1	local weakKeys = { __mode = 'k' }
+   1	local cache = setmetatable({}, weakKeys)
+   1	local resultsKey = {}
+   1	local nilKey = {}
+    	
+    	local function getMetaCall (callable)
+  68	    local meta = getmetatable(callable)
+  68	    return meta and meta.__call
+    	end
+    	
+    	return function (callable)
+  58	    local metaCall = getMetaCall(callable)
+    	    
+  58	    if type(callable) ~= 'function' and not metaCall then
+   4	        error 'Attempted to memoize a non-callable value.'
+    	    end
+    	    
+  54	    cache[callable] = setmetatable({}, weakKeys)
+    	
+    	    local function run (...)
+  45	        local node = cache[callable]
+  45	        local args = { ... }
+    	        
+ 116	        for i = 1, #args do
+  71	            local key = args[i]
+  71	            if key == nil then
+   4	                key = nilKey
+    	            end
+  71	            if not node[key] then
+  30	                node[key] = setmetatable({}, weakKeys)
+    	            end
+  71	            node = node[key]
+    	        end
+    	        
+  45	        if not node[resultsKey] then 
+  22	            node[resultsKey] = { callable(...) }
+    	        end
+    	        
+  44	        return unpack(node[resultsKey])
+    	    end
+    	    
+  54	    if metaCall then 
+    	        return function (...)
+  10	            local call = getMetaCall(callable)
+    	            
+  10	            if call ~= metaCall then
+   2	                cache[callable] = setmetatable({}, weakKeys)
+   2	                metaCall = call
+    	            end
+    	            
+  10	            return run(...)
+  16	        end, cache, resultsKey, nilKey
+    	    end
+    	    
+  38	    return run, cache, resultsKey, nilKey
+    	end
+    	
+
+==============================================================================
+./knife/test.lua
+==============================================================================
+    	local test, testAssert, testError
+    	
+    	-- Create a node representing a test section
+    	local function createNode (parent, description, process)
+ 102	    return setmetatable({
+  51	        parent = parent,
+  51	        description = description,
+  51	        process = process,
+  51	        nodes = {},
+  51	        activeNodeIndex = 1,
+  51	        currentNodeIndex = 0,
+  51	        assert = testAssert,
+  51	        error = testError,
+ 102	    }, { __call = test })
+    	end
+    	
+    	-- Run a node
+    	local function runNode (node)
+ 134	    node.currentNodeIndex = 0
+ 134	    return node:process()
+    	end
+    	
+    	-- Get the root node for a given node
+    	local function getRootNode (node) 
+ 135	    local parent = node.parent
+ 135	    return parent and getRootNode(parent) or node
+    	end
+    	
+    	-- Update the active child node of the given node
+    	local function updateActiveNode (node, description, process) 
+  83	    local activeNodeIndex = node.activeNodeIndex
+  83	    local nodes = node.nodes
+  83	    local activeNode = nodes[activeNodeIndex]
+    	
+  83	    if not activeNode then
+  45	        activeNode = createNode(node, description, process)
+  45	        nodes[activeNodeIndex] = activeNode
+    	    else 
+  38	        activeNode.process = process
+    	    end
+    	    
+  83	    getRootNode(node).lastActiveLeaf = activeNode
+    	
+  83	    return activeNode
+    	end
+    	
+    	-- Run the active child node of the given node
+    	local function runActiveNode (node, description, process) 
+  83	    local activeNode = updateActiveNode(node, description, process)
+  83	    return runNode(activeNode)
+    	end
+    	
+    	-- Get ancestors of a node, including the node
+   1	function getAncestors (node)
+   2	    local ancestors = { node }
+  14	    for ancestor in function () return node.parent end do
+   5	        ancestors[#ancestors + 1] = ancestor
+   5	        node = ancestor
+    	    end
+   2	    return ancestors
+    	end
+    	
+    	-- Print a message describing one execution path in the test scenario
+    	local function printScenario (node) 
+   2	    local ancestors = getAncestors(node)
+   9	    for i = #ancestors, 1, -1 do
+   7	        io.stderr:write(ancestors[i].description)
+   7	        io.stderr:write('\n')
+    	    end
+    	end
+    	
+    	-- Print a message and stop the test scenario when an assertion fails
+    	local function failAssert (node, description, message)
+   2	    io.stderr:write(message)
+   2	    io.stderr:write('\n\n')
+   2	    printScenario(node)
+   2	    io.stderr:write(description)
+   2	    io.stderr:write('\n\n')
+   2	    error(message, 3)
+    	end
+    	
+    	-- Create a branch node for a test scenario
+    	test = function (node, description, process) 
+ 348	    node.currentNodeIndex = node.currentNodeIndex + 1
+ 348	    if node.currentNodeIndex == node.activeNodeIndex then
+  83	        return runActiveNode(node, description, process) 
+    	    end
+    	end
+    	
+    	-- Test an assertion
+    	testAssert = function (self, value, description)
+ 168	    if not value then
+   1	        return failAssert(self, description, 'Test failed: assertion failed')
+    	    end
+ 167	    return value
+    	end
+    	
+    	-- Expect function f to fail
+    	testError = function (self, f, description)
+  14	    if pcall(f) then
+   1	        return failAssert(self, description, 'Test failed: expected error')
+    	    end
+    	end
+    	
+    	-- Create the root node for a test scenario
+    	local function T (description, process)
+   6	    local root = createNode(nil, description, process)
+    	    
+   6	    runNode(root)
+  51	    while root.activeNodeIndex <= #root.nodes do
+  45	        local lastActiveBranch = root.lastActiveLeaf.parent
+  45	        lastActiveBranch.activeNodeIndex = lastActiveBranch.activeNodeIndex + 1
+  45	        runNode(root)
+    	    end
+    	    
+   6	    return root
+    	end
+    	
+    	-- Run any other files passed from CLI.
+   1	if arg and arg[0]:gmatch('test.lua') then
+   1	    _G.T = T
+   5	    for i = 1, #arg do
+   4	        dofile(arg[i])
+    	    end
+   1	    _G.T = nil
+    	end
+    	
+   1	return T
+    	
+
+==============================================================================
+./spec/base.lua
+==============================================================================
+    	local function checkSubSuper (T, Sub, Super)
+  52	  T:assert(getmetatable(Sub).__index == Super, 
+  26	  'Then the super is the index for the sub')
+  52	  T:assert(Sub ~= Super,
+  26	  'Then the super is not identical to the sub')
+    	end
+    	
+    	local function checkNotCallable (T, instance)
+  24	  T:error(function () instance() end, 
+   8	  'Then the instance is not callable')
+    	end
+    	
+    	local function checkConstruct (T, Class)
+  36	  T('When instantiated with the default constructor', 
+    	  function (T)
+   4	    Class.constructor = nil
+   4	    local c = Class()
+   4	    checkSubSuper(T, c, Class)
+   4	    checkNotCallable (T, c)
+    	  end)
+  36	  T('When instantiated with a custom constructor', 
+    	  function (T)
+   8	    function Class:constructor (x) self.x = x; return x, 45 end
+   4	    local c, x, y = Class(123)
+   8	    T:assert(c.x == 123,
+   4	    'Then the constructor is applied to the instance')
+   8	    T:assert(x == 123 and y == 45,
+   4	    'Then return values from the constructor follow the instance')
+   4	    checkSubSuper(T, c, Class)
+   4	    checkNotCallable (T, c)
+    	  end)
+    	end
+    	
+    	local function checkExtend (T, Class)
+  24	  T('When a class is extended', 
+    	  function (T)
+   6	    local Sub = Class:extend()
+   6	    checkSubSuper(T, Sub, Class)
+   6	    checkConstruct(T, Sub)
+    	  end)
+    	end
+    	
+   2	T('Given a base class', 
+    	function (T)
+  13	  local Base = require 'knife.base'
+  26	  T('When the base class is extended with no arguments', 
+    	  function (T)
+   6	    local Thing = Base:extend()
+   6	    checkSubSuper(T, Thing, Base)
+   6	    checkConstruct(T, Thing)
+   6	    checkExtend (T, Thing)
+    	  end)
+  26	  T('When the base class is extended with a table argument', 
+    	  function (T)
+   6	    local t = { x = 1 }
+   6	    local Thing = Base:extend(t)
+  12	    T:assert(Thing == t,
+   6	    'Then the new class is identical to the table')
+   6	    checkSubSuper(T, Thing, Base)
+   6	    checkConstruct(T, Thing)
+   6	    checkExtend (T, Thing)
+    	  end)
+    	end)
+    	
+
+==============================================================================
+./spec/ecs.lua
+==============================================================================
+   2	T('Given a system and some entities',
+    	function (T)
+  13	  local ecs = require 'knife.ecs'
+    	  
+  13	  local posvel = { 'position', 'velocity' }
+    	  
+  26	  local updatePosition = ecs.system(
+  13	    posvel,
+    	    function (pos, vel)
+  22	      pos.x = pos.x + vel.x
+  22	      pos.y = pos.y + vel.y
+    	    end
+    	  )
+    	  
+  26	  local updateBoundary = ecs.system(
+  13	    posvel,
+    	    function (pos, vel)
+   2	      if pos.y > 40 then
+   1	        vel.y = vel.y * -1
+    	      end
+  15	    end, ecs.reverse
+  13	  )
+    	  
+  13	  local entities = {
+    	    {
+  13	      position = { x = 10, y = 20 }, 
+  13	      velocity = { x = 2, y = 1 }
+  13	    },
+    	    {
+  13	      position = { x = 30, y = 40 }, 
+  13	      velocity = { x = 1, y = 2 }
+    	    }
+  13	  }
+    	    
+  26	  T('When a system is invoked',
+    	  function (T)
+   1	    updatePosition(entities)
+   2	    T:assert(entities[1].position.x == 12 and entities[2].position.y == 42,
+   1	    'Then the components of the entities are updated')
+    	  end)
+    	  
+  26	  T('When the entities list is cached',
+    	  function (T)
+   6	    ecs.cache(entities)
+    	    
+  12	    T('When a system is invoked',
+    	    function (T)
+   5	      updatePosition(entities)
+  10	      T:assert(entities[1].position.x == 12 and entities[2].position.y == 42,
+   5	      'Then the components of the entities are updated')
+    	      
+  10	      T('When the other system is invoked',
+    	      function (T)
+   1	        updateBoundary(entities)
+   2	        T:assert(entities[2].velocity.y == -2,
+   1	        'Then the components of the entities are updated')
+    	      end)
+    	      
+  10	      T('When a system is invoked a second time',
+    	      function (T)
+   3	        updatePosition(entities)
+   6	        T:assert(entities[1].position.x == 14 and entities[2].position.y == 44,
+   3	        'Then the components of the entities are updated a second time')
+    	        
+   6	        T('When the cache is invalidated and a system is invoked a third time',
+    	        function (T)
+   1	          ecs.invalidate(entities)
+   1	          updatePosition(entities)
+   2	          T:assert(entities[1].position.x == 16 and entities[2].position.y == 46,
+   1	          'Then the components of the entities are updated a third time')
+    	        end)
+    	        
+   6	        T('When the cache is removed and a system is invoked a third time',
+    	        function (T)
+   1	          ecs.uncache(entities)
+   1	          updatePosition(entities)
+   2	          T:assert(entities[1].position.x == 16 and entities[2].position.y == 46,
+   1	          'Then the components of the entities are updated a third time')
+    	        end)
+    	        
+    	      end)
+    	      
+    	    end)
+    	    
+    	  end)
+    	  
+  26	  T('When ecs.each is invoked as an iterator',
+    	  function (T)
+   3	    for pos, vel in ecs.each(entities, posvel) do
+   2	      pos.x = pos.x + vel.x
+   2	      pos.y = pos.y + vel.y
+    	    end
+   2	    T:assert(entities[1].position.x == 12 and entities[2].position.y == 42,
+   1	    'Then the components of the entities are updated')
+    	  end)
+    	  
+  26	  T('When ecs.each is invoked with a callback',
+    	  function (T)
+   2	    ecs.each(entities, posvel, ecs.forward, function (pos, vel)
+   2	      pos.x = pos.x + vel.x
+   2	      pos.y = pos.y + vel.y
+    	    end)
+   2	    T:assert(entities[1].position.x == 12 and entities[2].position.y == 42,
+   1	    'Then the components of the entities are updated')
+    	  end)
+    	  
+  26	  T('When getting an id for an entity',
+    	  function (T)
+   3	    local id1 = ecs.ids[entities[1]]
+   6	    T:assert(id1,
+   3	    'Then the id is returned')
+    	    
+   6	    T('When getting an id for the same entity',
+    	    function (T)
+   1	      local id2 = ecs.ids[entities[1]]
+   2	      T:assert(id1 == id2,
+   1	      'Then the same id is returned')
+    	    end)
+    	    
+   6	    T('When getting the entity from the id',
+    	    function (T)
+   1	      local e = ecs.entities[id1]
+   2	      T:assert(e == entities[1],
+   1	      'Then the same entity is returned')
+    	    end)
+    	  
+    	  end)
+    	  
+    	end)
+
+==============================================================================
+./spec/memoize.lua
+==============================================================================
+   2	T('memoize', 
+    	function (T)
+    	    
+  15	  local memoize = require 'knife.memoize'
+    	
+  15	  local counter = 0
+    	
+    	  local function count(...)
+  12	    counter = counter + 1
+  12	    return counter
+    	  end
+    	
+  15	  local memoized_count = memoize(count)
+    	
+    	  local function switch(x,y)
+   2	    counter = counter + 1
+   2	    return y,x
+    	  end
+    	
+  15	  local memoized_switch = memoize(switch)
+    	
+  15	  local countable = setmetatable({}, {__call = count})
+  15	  local memoized_countable = memoize(countable)
+    	
+    	  local function count2(...)
+   1	    counter = counter + 1
+   1	    return counter
+    	  end
+    	
+  30	  T("should accept ony non-callable parameters, and error otherwise", 
+    	  function (T)
+   2	    T:error(function() memoize() end)
+   2	    T:error(function() memoize('foo') end)
+   2	    T:error(function() memoize(1) end)
+   2	    T:error(function() memoize({}) end)
+   1	    memoize(print)
+   1	    memoize(countable)
+    	  end)
+  30	  T("should work with 0 parameters", 
+    	  function (T)
+   1	    memoized_count()
+   1	    T:assert(memoized_count() == 1)
+   1	    T:assert(counter == 1)
+    	  end)
+    	
+  30	  T("should work with one parameter", 
+    	  function (T)
+   1	    memoized_count('foo')
+   1	    T:assert(memoized_count('foo') == 1)
+   1	    T:assert(memoized_count('bar') == 2)
+   1	    T:assert(memoized_count('foo') == 1)
+   1	    T:assert(memoized_count('bar') == 2)
+   1	    T:assert(counter == 2)
+    	  end)
+    	
+  30	  T("should work with two parameters", 
+    	  function (T)
+   1	    memoized_count('foo', 'bar')
+   1	    T:assert(memoized_count('foo', 'bar') == 1)
+   1	    T:assert(memoized_count('foo', 'baz') == 2)
+   1	    T:assert(memoized_count('foo', 'bar') == 1)
+   1	    T:assert(memoized_count('foo', 'baz') == 2)
+   1	    T:assert(counter == 2)
+    	  end)
+    	
+  30	  T("should work with tables & functions", 
+    	  function (T)
+   1	    local t1 = {}
+   1	    local t2 = {}
+   1	    T:assert(memoized_count(print, t1) == 1)
+   1	    T:assert(memoized_count(print, t2) == 2)
+   1	    T:assert(memoized_count(print, t1) == 1)
+   1	    T:assert(memoized_count(print, t2) == 2)
+   1	    T:assert(counter == 2)
+    	  end)
+    	
+  30	  T("should return multiple values when needed", 
+    	  function (T)
+   1	    local x,y = memoized_switch(100, 200)
+   1	    T:assert(x == 200)
+   1	    T:assert(y == 100)
+   1	    T:assert(counter == 1)
+   1	    x,y = memoized_switch(400, 500)
+   1	    T:assert(x == 500)
+   1	    T:assert(y == 400)
+   1	    T:assert(counter == 2)
+   1	    x,y = memoized_switch(100, 200)
+   1	    T:assert(x == 200)
+   1	    T:assert(y == 100)
+   1	    T:assert(counter == 2)
+   1	    x,y = memoized_switch(400, 500)
+   1	    T:assert(x == 500)
+   1	    T:assert(y == 400)
+   1	    T:assert(counter == 2)
+    	  end)
+    	
+  30	  T("should clean cache when called twice", 
+    	  function (T)
+   1	    memoized_count('reset')
+   1	    T:assert(memoized_count('reset') == 1)
+   1	    memoize(count)
+   1	    T:assert(memoized_count('reset') == 2)
+    	  end)
+    	
+  30	  T( 'callable tables', 
+    	  function (T)
+    	    
+   8	    T("Unchanged callable tables should work just like functions", 
+    	    function (T)
+   1	      memoized_countable()
+   1	      T:assert(memoized_countable() == 1)
+   1	      T:assert(counter == 1)
+   1	      memoized_countable('foo')
+   1	      T:assert(memoized_countable('foo') == 2)
+   1	      T:assert(counter == 2)
+    	    end)
+    	
+   8	    T("When callable table's __call metamethod is changed, the cache is reset", 
+    	    function (T)
+   1	      memoized_countable('bar')
+   1	      T:assert(memoized_countable('bar') == 1)
+   1	      local mt = getmetatable(countable)
+   1	      mt.__call = count2
+   1	      memoized_countable('bar')
+   1	      T:assert(memoized_countable('bar') == 2)
+   1	      T:assert(memoized_countable('bar') == 2)
+    	    end)
+    	
+   8	    T("An error is thrown if a memoized callable table loses its __call", 
+    	    function (T)
+   1	      local mt = getmetatable(countable)
+   1	      mt.__call = nil
+   2	      T:error(function() memoized_countable() end)
+    	    end)
+    	  end)
+    	  
+  30	  T("airstruck", 
+    	  function (T)
+    	  
+    	      local function cat(a, b, c)
+   4	        return tostring(a) .. tostring(b) .. tostring(c)
+    	      end
+    	
+   3	      local memoized_cat = memoize(cat)
+    	      
+    	      local function passthrough (...)
+   2	        return ...
+    	      end
+    	
+   3	      local memoized_passthrough = memoize(passthrough)
+    	  
+   6	      T("handles nil arguments", 
+    	      function (T)
+    	        
+   1	        T:assert(memoized_cat('a', 'b', 'c') == 'abc')
+   1	        T:assert(memoized_cat('a', 'b', 'c') == 'abc')
+    	        
+   1	        T:assert(memoized_cat('va', nil, 'la') == 'vanilla')
+   1	        T:assert(memoized_cat('va', nil, 'la') == 'vanilla')
+   1	        T:assert(memoized_cat('va', 'la') == 'valanil')
+   1	        T:assert(memoized_cat('va', 'la') == 'valanil')
+   1	        T:assert(memoized_cat('va') == 'vanilnil')
+   1	        T:assert(memoized_cat('va') == 'vanilnil')
+    	        
+    	      end)
+    	      
+   6	      T("handles nil results", 
+    	      function (T)
+   1	        local a, b, c = memoized_passthrough('a', 'b', 'c')
+   1	        T:assert(a == 'a') T:assert(b == 'b') T:assert(c == 'c')
+    	        
+   1	        a, b, c = memoized_passthrough('a', 'b', 'c')
+   1	        T:assert(a == 'a') T:assert(b == 'b') T:assert(c == 'c')
+    	        
+   1	        x, y, z = memoized_passthrough('x', nil, 'z')
+   1	        T:assert(x == 'x') T:assert(y == nil) T:assert(z == 'z')
+    	        
+   1	        x, y, z = memoized_passthrough('x', nil, 'z')
+   1	        T:assert(x == 'x') T:assert(y == nil) T:assert(z == 'z')
+    	        
+    	      end)
+    	      
+    	  end)
+    	
+    	end)
+    	
+
+==============================================================================
+./spec/test.lua
+==============================================================================
+   2	T('Given an empty table', 
+    	function (T)
+   6	  local t = {}
+  12	  T('When an item is inserted into a table', 
+    	  function (T)
+   5	    assert(#t == 0)
+   5	    table.insert(t, 111)
+   5	    T:assert(#t == 1, 'Then the size of the table is 1')
+   5	    T:assert(t[1] == 111, 'Then the item is stored in index 1')
+    	    
+  10	    T('When the index is set to nil', 
+    	    function (T)
+   1	      assert(#t == 1)
+   1	      t[1] = nil
+   1	      T:assert(#t == 0, 'Then the size of the table is 0')
+   2	        pcall(function ()
+   2	            T:error(function () end, 'THIS TEST INTENTIONALLY FAILS')
+    	        end)
+    	    end)
+    	    
+  10	    T('When another item is inserted', 
+    	    function (T)
+   3	      assert(#t == 1)
+   3	      table.insert(t, 222)
+   3	      T:assert(#t == 2, 'Then the size of the table is 2')
+   3	      T:assert(t[2] == 222, 'Then the second item is stored in index 2')
+    	
+   6	      T('When the first item is removed with table.remove', 
+    	      function (T)
+   1	        assert(#t == 2)
+   1	        table.remove(t, 1)
+   1	        T:assert(#t == 1, 'Then the size of the table is 1')
+   1	        T:assert(t[1] == 222, 'Then the second item has moved to index 1')
+    	      end)
+    	      
+   6	      T('When the first item is set to nil', 
+    	      function (T)
+   1	        assert(#t == 2)
+   1	        t[1] = nil
+   1	        T:assert(#t == 2, 'Then the size of the table is 2')
+   1	        T:assert(t[2] == 222, 'Then the second item remains in index 2')
+   2	        pcall(function () 
+   1	            T:assert(false, 'THIS TEST INTENTIONALLY FAILS') 
+    	        end)
+    	      end)
+    	    end)
+    	    
+    	  end)
+    	end)
+    	
+   2	T('Given a value of two', function (T)
+   3	  local value = 2
+   6	  T('When the value is increased by five', function (T)
+    	    -- here, value is 2
+   1	    value = value + 5
+   1	    T:assert(value == 7, 'Then the value equals seven')
+    	  end)
+   6	  T('When the value is decreased by five', function (T)
+    	    -- value is 2 again; this test is isolated from the "increased by five" test
+   1	    value = value - 5
+   1	    T:assert(value == -3, 'Then the value equals negative three')
+    	  end)
+    	end)
+    	
+   2	T('Given a value of two', function (T)
+   1	  local value = 2
+   1	  T:assert(value == 2, 'Then the value equals two')
+    	end)
+
+==============================================================================
+Summary
+==============================================================================
+
+8	0	100.00%	./knife/base.lua
+63	0	100.00%	./knife/ecs.lua
+31	0	100.00%	./knife/memoize.lua
+62	0	100.00%	./knife/test.lua
+39	0	100.00%	./spec/base.lua
+72	0	100.00%	./spec/ecs.lua
+111	0	100.00%	./spec/memoize.lua
+41	0	100.00%	./spec/test.lua
+------------------------
+427	0	100.00%	
