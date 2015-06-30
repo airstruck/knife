@@ -152,15 +152,15 @@ function (T)
       T("handles nil arguments", 
       function (T)
         
-        T:assert(memoized_cat('a', 'b', 'c') == 'abc')
-        T:assert(memoized_cat('a', 'b', 'c') == 'abc')
+        T:assert(memoized_cat('a', 'b', 'c') == 'abc', '1')
+        T:assert(memoized_cat('a', 'b', 'c') == 'abc', '2')
         
-        T:assert(memoized_cat('va', nil, 'la') == 'vanilla')
-        T:assert(memoized_cat('va', nil, 'la') == 'vanilla')
-        T:assert(memoized_cat('va', 'la') == 'valanil')
-        T:assert(memoized_cat('va', 'la') == 'valanil')
-        T:assert(memoized_cat('va') == 'vanilnil')
-        T:assert(memoized_cat('va') == 'vanilnil')
+        T:assert(memoized_cat('va', nil, 'la') == 'vanilla', '3')
+        T:assert(memoized_cat('va', nil, 'la') == 'vanilla', '4')
+        T:assert(memoized_cat('va', 'la') == 'valanil', '5')
+        T:assert(memoized_cat('va', 'la') == 'valanil', '6')
+        T:assert(memoized_cat('va') == 'vanilnil', '7')
+        T:assert(memoized_cat('va') == 'vanilnil', '8')
         
       end)
       

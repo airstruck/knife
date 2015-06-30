@@ -1,0 +1,41 @@
+language: c
+
+sudo: false
+
+env:
+  global:
+    - LUAROCKS=2.2.2
+  matrix:
+    - LUA=lua5.1
+    - LUA=lua5.2
+    - LUA=lua5.3
+    - LUA=luajit     # latest stable version (2.0.3)
+    - LUA=luajit2.0  # current head of 2.0 branch
+    - LUA=luajit2.1  # current head of 2.1 branch
+
+branches:
+  only:
+    - master
+
+before_install:
+  - source .travis/setenv_lua.sh
+  - pip install --user cpp-coveralls
+  - luarocks install Lua-cURL         --server=https://luarocks.org/dev
+  - luarocks install luacov-coveralls --server=https://luarocks.org/dev
+  - luarocks install lunitx
+
+install:
+  - echo noop
+
+script:
+  - lua -lluacov ./knife/test.lua ./spec/*
+
+after_success:
+  - coveralls -b .. -r .. -i ./src --dump c.report.json
+  - luacov-coveralls -j c.report.json -v
+
+notifications:
+  email:
+    on_success: change
+    on_failure: always
+
