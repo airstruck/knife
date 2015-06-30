@@ -2,7 +2,7 @@ local ecs = {}
 
 local cache = setmetatable({}, { __mode = 'k' })
 
-ecs.forward = pairs
+ecs.forward = ipairs
 
 function ecs.reverse (list)
     local function reverse (list, index)
@@ -21,7 +21,7 @@ end
 local function extractComponents (context, entity, aspects) 
     local components = {}
     
-    for index, aspect in pairs(aspects) do
+    for index, aspect in ipairs(aspects) do
         local component = extractComponent(context, entity, aspect) 
         if not component then return end
         components[index] = component
@@ -73,7 +73,7 @@ end
 local function traverse (entities, aspects, iterator, process, ...)
     local componentsList = extractComponentsList(entities, aspects, iterator)
     
-    for index, components in pairs(componentsList) do
+    for index, components in ipairs(componentsList) do
         process(unpackArgs(components, 1, ...))
     end
     
