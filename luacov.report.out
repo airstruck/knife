@@ -158,25 +158,32 @@
    1	local nilKey = {}
     	
     	local function getMetaCall (callable)
-  68	    local meta = getmetatable(callable)
-  68	    return meta and meta.__call
+  64	    local meta = getmetatable(callable)
+  64	    return meta and meta.__call
+    	end
+    	
+    	local function tuple (...)
+  21	    local values = { ... }
+  21	    local count = select('#', ...)
+    	    return function ()
+  44	        return unpack(values, 1, count)
+    	    end
     	end
     	
     	return function (callable)
-  58	    local metaCall = getMetaCall(callable)
+  54	    local metaCall = getMetaCall(callable)
     	    
-  58	    if type(callable) ~= 'function' and not metaCall then
+  54	    if type(callable) ~= 'function' and not metaCall then
    4	        error 'Attempted to memoize a non-callable value.'
     	    end
     	    
-  54	    cache[callable] = setmetatable({}, weakKeys)
+  50	    cache[callable] = setmetatable({}, weakKeys)
     	
     	    local function run (...)
   45	        local node = cache[callable]
-  45	        local args = { ... }
-    	        
- 116	        for i = 1, #args do
-  71	            local key = args[i]
+  45	        local argc = select('#', ...)
+ 116	        for i = 1, argc do
+  71	            local key = select(i, ...)
   71	            if key == nil then
    4	                key = nilKey
     	            end
@@ -187,13 +194,13 @@
     	        end
     	        
   45	        if not node[resultsKey] then 
-  22	            node[resultsKey] = { callable(...) }
+  22	            node[resultsKey] = tuple(callable(...))
     	        end
     	        
-  44	        return unpack(node[resultsKey])
+  44	        return node[resultsKey]()
     	    end
     	    
-  54	    if metaCall then 
+  50	    if metaCall then 
     	        return function (...)
   10	            local call = getMetaCall(callable)
     	            
@@ -206,7 +213,7 @@
   16	        end, cache, resultsKey, nilKey
     	    end
     	    
-  38	    return run, cache, resultsKey, nilKey
+  34	    return run, cache, resultsKey, nilKey
     	end
     	
 
@@ -279,19 +286,19 @@
     	local function printScenario (node) 
    2	    local ancestors = getAncestors(node)
    9	    for i = #ancestors, 1, -1 do
-   7	        io.stderr:write(ancestors[i].description)
+   7	        io.stderr:write(ancestors[i].description or '')
    7	        io.stderr:write('\n')
     	    end
     	end
     	
     	-- Print a message and stop the test scenario when an assertion fails
     	local function failAssert (node, description, message)
-   2	    io.stderr:write(message)
+   2	    io.stderr:write(message or '')
    2	    io.stderr:write('\n\n')
    2	    printScenario(node)
-   2	    io.stderr:write(description)
+   2	    io.stderr:write(description or '')
    2	    io.stderr:write('\n\n')
-   2	    error(message, 3)
+   2	    error(message or '')
     	end
     	
     	-- Create a branch node for a test scenario
@@ -605,10 +612,10 @@
   30	  T("should work with two parameters", 
     	  function (T)
    1	    memoized_count('foo', 'bar')
-   1	    T:assert(memoized_count('foo', 'bar') == 1)
-   1	    T:assert(memoized_count('foo', 'baz') == 2)
-   1	    T:assert(memoized_count('foo', 'bar') == 1)
-   1	    T:assert(memoized_count('foo', 'baz') == 2)
+   1	    T:assert(memoized_count('foo', 'bar') == 1, '1')
+   1	    T:assert(memoized_count('foo', 'baz') == 2, '2')
+   1	    T:assert(memoized_count('foo', 'bar') == 1, '3')
+   1	    T:assert(memoized_count('foo', 'baz') == 2, '4')
    1	    T:assert(counter == 2)
     	  end)
     	
@@ -686,35 +693,38 @@
   30	  T("airstruck", 
     	  function (T)
     	  
-    	      local function cat(a, b, c)
-   4	        return tostring(a) .. tostring(b) .. tostring(c)
-    	      end
-    	
-   3	      local memoized_cat = memoize(cat)
-    	      
-    	      local function passthrough (...)
-   2	        return ...
-    	      end
-    	
-   3	      local memoized_passthrough = memoize(passthrough)
-    	  
    6	      T("handles nil arguments", 
     	      function (T)
+    	  
+    	        local function cat(a, b, c)
+   4	          return tostring(a) .. tostring(b) .. tostring(c)
+    	        end
+    	
+   1	        local memoized_cat = memoize(cat)
     	        
-   1	        T:assert(memoized_cat('a', 'b', 'c') == 'abc')
-   1	        T:assert(memoized_cat('a', 'b', 'c') == 'abc')
+   1	        T:assert(memoized_cat('a', 'b', 'c') == 'abc', '1')
+   1	        T:assert(memoized_cat('a', 'b', 'c') == 'abc', '2')
     	        
-   1	        T:assert(memoized_cat('va', nil, 'la') == 'vanilla')
-   1	        T:assert(memoized_cat('va', nil, 'la') == 'vanilla')
-   1	        T:assert(memoized_cat('va', 'la') == 'valanil')
-   1	        T:assert(memoized_cat('va', 'la') == 'valanil')
-   1	        T:assert(memoized_cat('va') == 'vanilnil')
-   1	        T:assert(memoized_cat('va') == 'vanilnil')
+   1	        T:assert(memoized_cat('va', nil, 'la') == 'vanilla', '3')
+   1	        T:assert(memoized_cat('va', nil, 'la') == 'vanilla', '4')
+    	        
+   1	        T:assert(memoized_cat('va', 'la') == 'valanil', '5')
+   1	        T:assert(memoized_cat('va', 'la') == 'valanil', '6')
+    	        
+   1	        T:assert(memoized_cat('va') == 'vanilnil', '7')
+   1	        T:assert(memoized_cat('va') == 'vanilnil', '8')
     	        
     	      end)
     	      
    6	      T("handles nil results", 
     	      function (T)
+    	      
+    	        local function passthrough (a, b, c)
+   2	          return a, b, c
+    	        end
+    	
+   1	        local memoized_passthrough = memoize(passthrough)
+    	      
    1	        local a, b, c = memoized_passthrough('a', 'b', 'c')
    1	        T:assert(a == 'a') T:assert(b == 'b') T:assert(c == 'c')
     	        
@@ -792,7 +802,8 @@
    6	  T('When the value is increased by five', function (T)
     	    -- here, value is 2
    1	    value = value + 5
-   1	    T:assert(value == 7, 'Then the value equals seven')
+   1	    local foo = 10
+   1	    T:assert(value == 7 and foo == 10, 'Then the value equals seven')
     	  end)
    6	  T('When the value is decreased by five', function (T)
     	    -- value is 2 again; this test is isolated from the "increased by five" test
@@ -812,11 +823,11 @@ Summary
 
 8	0	100.00%	./knife/base.lua
 63	0	100.00%	./knife/ecs.lua
-31	0	100.00%	./knife/memoize.lua
+34	0	100.00%	./knife/memoize.lua
 62	0	100.00%	./knife/test.lua
 39	0	100.00%	./spec/base.lua
 72	0	100.00%	./spec/ecs.lua
 111	0	100.00%	./spec/memoize.lua
-41	0	100.00%	./spec/test.lua
+42	0	100.00%	./spec/test.lua
 ------------------------
-427	0	100.00%	
+431	0	100.00%	

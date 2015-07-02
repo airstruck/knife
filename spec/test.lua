@@ -53,7 +53,8 @@ T('Given a value of two', function (T)
   T('When the value is increased by five', function (T)
     -- here, value is 2
     value = value + 5
-    T:assert(value == 7, 'Then the value equals seven')
+    local foo = 10
+    T:assert(value == 7 and foo == 10, 'Then the value equals seven')
   end)
   T('When the value is decreased by five', function (T)
     -- value is 2 again; this test is isolated from the "increased by five" test

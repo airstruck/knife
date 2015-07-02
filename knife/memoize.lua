@@ -9,6 +9,14 @@ local function getMetaCall (callable)
     return meta and meta.__call
 end
 
+local function tuple (...)
+    local values = { ... }
+    local count = select('#', ...)
+    return function ()
+        return unpack(values, 1, count)
+    end
+end
+
 return function (callable)
     local metaCall = getMetaCall(callable)
     
@@ -20,10 +28,9 @@ return function (callable)
 
     local function run (...)
         local node = cache[callable]
-        local args = { ... }
-        
-        for i = 1, #args do
-            local key = args[i]
+        local argc = select('#', ...)
+        for i = 1, argc do
+            local key = select(i, ...)
             if key == nil then
                 key = nilKey
             end
@@ -34,10 +41,10 @@ return function (callable)
         end
         
         if not node[resultsKey] then 
-            node[resultsKey] = { callable(...) }
+            node[resultsKey] = tuple(callable(...))
         end
         
-        return unpack(node[resultsKey])
+        return node[resultsKey]()
     end
     
     if metaCall then 

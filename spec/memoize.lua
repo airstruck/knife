@@ -56,10 +56,10 @@ function (T)
   T("should work with two parameters", 
   function (T)
     memoized_count('foo', 'bar')
-    T:assert(memoized_count('foo', 'bar') == 1)
-    T:assert(memoized_count('foo', 'baz') == 2)
-    T:assert(memoized_count('foo', 'bar') == 1)
-    T:assert(memoized_count('foo', 'baz') == 2)
+    T:assert(memoized_count('foo', 'bar') == 1, '1')
+    T:assert(memoized_count('foo', 'baz') == 2, '2')
+    T:assert(memoized_count('foo', 'bar') == 1, '3')
+    T:assert(memoized_count('foo', 'baz') == 2, '4')
     T:assert(counter == 2)
   end)
 
@@ -137,28 +137,24 @@ function (T)
   T("airstruck", 
   function (T)
   
-      local function cat(a, b, c)
-        return tostring(a) .. tostring(b) .. tostring(c)
-      end
-
-      local memoized_cat = memoize(cat)
-      
-      local function passthrough (...)
-        return ...
-      end
-
-      local memoized_passthrough = memoize(passthrough)
-  
       T("handles nil arguments", 
       function (T)
+  
+        local function cat(a, b, c)
+          return tostring(a) .. tostring(b) .. tostring(c)
+        end
+
+        local memoized_cat = memoize(cat)
         
         T:assert(memoized_cat('a', 'b', 'c') == 'abc', '1')
         T:assert(memoized_cat('a', 'b', 'c') == 'abc', '2')
         
         T:assert(memoized_cat('va', nil, 'la') == 'vanilla', '3')
         T:assert(memoized_cat('va', nil, 'la') == 'vanilla', '4')
+        
         T:assert(memoized_cat('va', 'la') == 'valanil', '5')
         T:assert(memoized_cat('va', 'la') == 'valanil', '6')
+        
         T:assert(memoized_cat('va') == 'vanilnil', '7')
         T:assert(memoized_cat('va') == 'vanilnil', '8')
         
@@ -166,6 +162,13 @@ function (T)
       
       T("handles nil results", 
       function (T)
+      
+        local function passthrough (a, b, c)
+          return a, b, c
+        end
+
+        local memoized_passthrough = memoize(passthrough)
+      
         local a, b, c = memoized_passthrough('a', 'b', 'c')
         T:assert(a == 'a') T:assert(b == 'b') T:assert(c == 'c')
         

@@ -64,19 +64,19 @@ end
 local function printScenario (node) 
     local ancestors = getAncestors(node)
     for i = #ancestors, 1, -1 do
-        io.stderr:write(ancestors[i].description)
+        io.stderr:write(ancestors[i].description or '')
         io.stderr:write('\n')
     end
 end
 
 -- Print a message and stop the test scenario when an assertion fails
 local function failAssert (node, description, message)
-    io.stderr:write(message)
+    io.stderr:write(message or '')
     io.stderr:write('\n\n')
     printScenario(node)
-    io.stderr:write(description)
+    io.stderr:write(description or '')
     io.stderr:write('\n\n')
-    error(message, 3)
+    error(message or '')
 end
 
 -- Create a branch node for a test scenario
