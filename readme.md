@@ -2,7 +2,7 @@
 
 A collection of useful micro-modules for Lua.
 
- * [knife.base](readme/system.md) - A base class for class-based OOP.
+ * [knife.base](readme/base.md) - A base class for class-based OOP.
  * [knife.event](readme/event.md) - Dispatch and handle events.
  * [knife.memoize](readme/memoize.md) - A memoization function.
  * [knife.system](readme/system.md) - An entity component system.
