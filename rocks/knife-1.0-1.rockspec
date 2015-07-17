@@ -13,8 +13,10 @@ build = {
 type = "builtin",
 modules = {
 ["knife.base"] = "base.lua",
-["knife.ecs"] = "ecs.lua",
+["knife.base.common"] = "base/common.lua",
+["knife.event"] = "event.lua",
 ["knife.memoize"] = "memoize.lua",
+["knife.system"] = "system.lua",
 ["knife.test"] = "test.lua",
 }
 }

@@ -17,135 +17,89 @@
     	
 
 ==============================================================================
-./knife/ecs.lua
+./knife/event.lua
 ==============================================================================
-   1	local ecs = {}
+    	-- Event module
+   1	local Event = {}
     	
-   1	local cache = setmetatable({}, { __mode = 'k' })
+    	-- Event handler registry
+   1	Event.handlers = {}
     	
-   1	ecs.forward = ipairs
-    	
-   1	function ecs.reverse (list)
-    	    local function reverse (list, index)
-   3	        if index <= 1 then return end
-   2	        index = index - 1
-   2	        return index, list[index]
+    	-- Remove an event handler from the registry
+    	local function removeHandler (self)
+   3	    if self.prevHandler then
+   1	        self.prevHandler.nextHandler = self.nextHandler
     	    end
-    	    
-   1	    return reverse, list, #list + 1
+   3	    if self.nextHandler then
+   1	        self.nextHandler.prevHandler = self.prevHandler
+    	    end
+   3	    if Event.handlers[self.name] == self then
+   2	        Event.handlers[self.name] = self.nextHandler
+    	    end
+   3	    self.prevHandler = nil
+   3	    self.nextHandler = nil
     	end
     	
-    	local function extractComponent (context, entity, aspect) 
-  44	    return context[aspect] or entity[aspect]
+    	-- Create an event handler
+    	local function Handler (name, callback)
+  15	    return { 
+  15	        name = name, 
+  15	        callback = callback, 
+  15	        remove = removeHandler
+  15	    }
     	end
     	
-    	local function extractComponents (context, entity, aspects) 
-  22	    local components = {}
-    	    
-  66	    for index, aspect in ipairs(aspects) do
-  44	        local component = extractComponent(context, entity, aspect) 
-  44	        if not component then return end
-  44	        components[index] = component
+    	-- Insert an event handler into the registry
+    	local function register (handler)
+  15	    handler.nextHandler = Event.handlers[handler.name]
+  15	    if handler.nextHandler then
+   5	        handler.nextHandler.prevHandler = handler
     	    end
+  15	    Event.handlers[handler.name] = handler
     	    
-  22	    return components
+  15	    return handler
     	end
     	
-    	local function extractComponentsList (entities, aspects, iterator) 
-  14	    local cached = cache[entities]
-    	    
-  14	    if not iterator then
-  12	        iterator = ecs.forward
-    	    end
-    	    
-  14	    if cached and cached[aspects] and cached[aspects][iterator] then 
-   3	        return cached[aspects][iterator]
-    	    end
-    	    
-  11	    local list = {}
-  11	    local context = { _entities = entities }
-    	    
-  33	    for index, entity in iterator(entities) do
-  22	        context._index = index
-  22	        context._entity = entity
-  22	        list[#list + 1] = extractComponents(context, entity, aspects)
-    	    end
-    	    
-  11	    if cached then
-   7	        if cached[aspects] then
-   1	            cached[aspects][iterator] = list
-    	        else
-  12	            cached[aspects] = setmetatable({ [iterator] = list },
-  12	                { __mode = 'k' })
-    	        end 
-    	    end
-    	    
-  11	    return list
+    	-- Create and register a new event handler
+   1	function Event.on (name, callback)
+  15	    return register(Handler(name, callback))
     	end
     	
-    	local function unpackArgs (list, index, ...)
-  84	    if index > #list then
-  28	        return ... 
-    	    end
+    	-- Dispatch an event
+   1	function Event.dispatch (name, ...)
+   8	    local handler = Event.handlers[name]
     	    
-  56	    return list[index], unpackArgs(list, index + 1, ...)
-    	end
-    	
-    	local function traverse (entities, aspects, iterator, process, ...)
-  14	    local componentsList = extractComponentsList(entities, aspects, iterator)
-    	    
-  42	    for index, components in ipairs(componentsList) do
-  28	        process(unpackArgs(components, 1, ...))
-    	    end
-    	    
-  14	    return context
-    	end
-    	
-   1	function ecs.each (entities, aspects, iterator, process, ...) 
-   2	    if process then
-   1	        return traverse(entities, aspects, iterator, process, ...) 
-    	    else 
-   2	        return coroutine.wrap(function ()
-   1	            traverse(entities, aspects, iterator, coroutine.yield)
-    	        end)
+  15	    while handler do
+   8	        if handler.callback(...) == false then 
+   1	            return handler
+    	        end
+   7	        handler = handler.nextHandler
     	    end
     	end
     	
-   1	function ecs.system (aspects, process, iterator)
-    	    return function (entities, ...)
-  12	        return traverse(entities, aspects, iterator, process, ...)
+    	-- Inject a dispatcher into a table.
+    	local function injectDispatcher (t, key)
+    	    t[key] = function (...)
+   2	        return Event.dispatch(key, ...)
     	    end
     	end
     	
-   1	function ecs.cache (entities)
-   7	    cache[entities] = setmetatable({}, { __mode = 'k' })
-    	end
-    	
-   1	function ecs.invalidate (entities)
-   1	    if cache[entities] then
-   1	        ecs.cache (entities)
+    	-- Inject dispatchers into a table. Examples:
+    	-- Event.injectDispatchers(love.handlers)
+    	-- Event.injectDispatchers(love, { 'load', 'update', 'draw' })
+   1	function Event.injectDispatchers (t, keys)
+   2	    if keys then
+   2	        for _, key in ipairs(keys) do
+   1	            injectDispatcher(t, key)
+    	        end
+    	    else
+   2	        for key in pairs(t) do 
+   1	            injectDispatcher(t, key)
+    	        end
     	    end
     	end
     	
-   1	function ecs.uncache (entities)
-   1	    cache[entities] = nil
-    	end
-    	
-   1	local entityMaxId = 0
-    	
-   1	ecs.entities = setmetatable({}, { __mode = 'v' })
-    	
-   2	ecs.ids = setmetatable({}, { 
-   1	    __mode = 'k', 
-    	    __index = function(self, entity) 
-   3	        entityMaxId = entityMaxId + 1
-   3	        self[entity] = entityMaxId
-   3	        ecs.entities[entityMaxId] = entity
-   3	        return entityMaxId
-    	    end
-   1	})
-    	
-   1	return ecs
+   1	return Event
     	
 
 ==============================================================================
@@ -218,58 +172,190 @@
     	
 
 ==============================================================================
+./knife/system.lua
+==============================================================================
+   1	local System = {}
+    	
+   1	local cache = setmetatable({}, { __mode = 'k' })
+    	
+   1	System.forward = ipairs
+    	
+   1	function System.reverse (list)
+    	    local function reverse (list, index)
+   3	        if index <= 1 then return end
+   2	        index = index - 1
+   2	        return index, list[index]
+    	    end
+    	    
+   1	    return reverse, list, #list + 1
+    	end
+    	
+    	local function extractComponent (context, entity, aspect) 
+  44	    return context[aspect] or entity[aspect]
+    	end
+    	
+    	local function extractComponents (context, entity, aspects) 
+  22	    local components = {}
+    	    
+  66	    for index, aspect in ipairs(aspects) do
+  44	        local component = extractComponent(context, entity, aspect) 
+  44	        if not component then return end
+  44	        components[index] = component
+    	    end
+    	    
+  22	    return components
+    	end
+    	
+    	local function extractComponentsList (entities, aspects, iterator) 
+  14	    local cached = cache[entities]
+    	    
+  14	    if not iterator then
+  12	        iterator = System.forward
+    	    end
+    	    
+  14	    if cached and cached[aspects] and cached[aspects][iterator] then 
+   3	        return cached[aspects][iterator]
+    	    end
+    	    
+  11	    local list = {}
+  11	    local context = { _entities = entities }
+    	    
+  33	    for index, entity in iterator(entities) do
+  22	        context._index = index
+  22	        context._entity = entity
+  22	        list[#list + 1] = extractComponents(context, entity, aspects)
+    	    end
+    	    
+  11	    if cached then
+   7	        if cached[aspects] then
+   1	            cached[aspects][iterator] = list
+    	        else
+  12	            cached[aspects] = setmetatable({ [iterator] = list },
+  12	                { __mode = 'k' })
+    	        end 
+    	    end
+    	    
+  11	    return list
+    	end
+    	
+    	local function unpackArgs (list, index, ...)
+  84	    if index > #list then
+  28	        return ... 
+    	    end
+    	    
+  56	    return list[index], unpackArgs(list, index + 1, ...)
+    	end
+    	
+    	local function traverse (entities, aspects, iterator, process, ...)
+  14	    local componentsList = extractComponentsList(entities, aspects, iterator)
+    	    
+  42	    for index, components in ipairs(componentsList) do
+  28	        process(unpackArgs(components, 1, ...))
+    	    end
+    	    
+  14	    return context
+    	end
+    	
+   1	function System.each (entities, aspects, iterator, process, ...) 
+   2	    if process then
+   1	        return traverse(entities, aspects, iterator, process, ...) 
+    	    else 
+   2	        return coroutine.wrap(function ()
+   1	            traverse(entities, aspects, iterator, coroutine.yield)
+    	        end)
+    	    end
+    	end
+    	
+   1	function System.create (aspects, process, iterator)
+    	    return function (entities, ...)
+  12	        return traverse(entities, aspects, iterator, process, ...)
+    	    end
+    	end
+    	
+   1	function System.cache (entities)
+   7	    cache[entities] = setmetatable({}, { __mode = 'k' })
+    	end
+    	
+   1	function System.invalidate (entities)
+   1	    if cache[entities] then
+   1	        System.cache (entities)
+    	    end
+    	end
+    	
+   1	function System.uncache (entities)
+   1	    cache[entities] = nil
+    	end
+    	
+   1	local entityMaxId = 0
+    	
+   1	System.entities = setmetatable({}, { __mode = 'v' })
+    	
+   2	System.ids = setmetatable({}, { 
+   1	    __mode = 'k', 
+    	    __index = function(self, entity) 
+   3	        entityMaxId = entityMaxId + 1
+   3	        self[entity] = entityMaxId
+   3	        System.entities[entityMaxId] = entity
+   3	        return entityMaxId
+    	    end
+   1	})
+    	
+   1	return System
+    	
+
+==============================================================================
 ./knife/test.lua
 ==============================================================================
     	local test, testAssert, testError
     	
     	-- Create a node representing a test section
     	local function createNode (parent, description, process)
- 102	    return setmetatable({
-  51	        parent = parent,
-  51	        description = description,
-  51	        process = process,
-  51	        nodes = {},
-  51	        activeNodeIndex = 1,
-  51	        currentNodeIndex = 0,
-  51	        assert = testAssert,
-  51	        error = testError,
- 102	    }, { __call = test })
+ 124	    return setmetatable({
+  62	        parent = parent,
+  62	        description = description,
+  62	        process = process,
+  62	        nodes = {},
+  62	        activeNodeIndex = 1,
+  62	        currentNodeIndex = 0,
+  62	        assert = testAssert,
+  62	        error = testError,
+ 124	    }, { __call = test })
     	end
     	
     	-- Run a node
     	local function runNode (node)
- 134	    node.currentNodeIndex = 0
- 134	    return node:process()
+ 165	    node.currentNodeIndex = 0
+ 165	    return node:process()
     	end
     	
     	-- Get the root node for a given node
     	local function getRootNode (node) 
- 135	    local parent = node.parent
- 135	    return parent and getRootNode(parent) or node
+ 168	    local parent = node.parent
+ 168	    return parent and getRootNode(parent) or node
     	end
     	
     	-- Update the active child node of the given node
     	local function updateActiveNode (node, description, process) 
-  83	    local activeNodeIndex = node.activeNodeIndex
-  83	    local nodes = node.nodes
-  83	    local activeNode = nodes[activeNodeIndex]
+ 103	    local activeNodeIndex = node.activeNodeIndex
+ 103	    local nodes = node.nodes
+ 103	    local activeNode = nodes[activeNodeIndex]
     	
-  83	    if not activeNode then
-  45	        activeNode = createNode(node, description, process)
-  45	        nodes[activeNodeIndex] = activeNode
+ 103	    if not activeNode then
+  55	        activeNode = createNode(node, description, process)
+  55	        nodes[activeNodeIndex] = activeNode
     	    else 
-  38	        activeNode.process = process
+  48	        activeNode.process = process
     	    end
     	    
-  83	    getRootNode(node).lastActiveLeaf = activeNode
+ 103	    getRootNode(node).lastActiveLeaf = activeNode
     	
-  83	    return activeNode
+ 103	    return activeNode
     	end
     	
     	-- Run the active child node of the given node
     	local function runActiveNode (node, description, process) 
-  83	    local activeNode = updateActiveNode(node, description, process)
-  83	    return runNode(activeNode)
+ 103	    local activeNode = updateActiveNode(node, description, process)
+ 103	    return runNode(activeNode)
     	end
     	
     	-- Get ancestors of a node, including the node
@@ -303,18 +389,18 @@
     	
     	-- Create a branch node for a test scenario
     	test = function (node, description, process) 
- 348	    node.currentNodeIndex = node.currentNodeIndex + 1
- 348	    if node.currentNodeIndex == node.activeNodeIndex then
-  83	        return runActiveNode(node, description, process) 
+ 425	    node.currentNodeIndex = node.currentNodeIndex + 1
+ 425	    if node.currentNodeIndex == node.activeNodeIndex then
+ 103	        return runActiveNode(node, description, process) 
     	    end
     	end
     	
     	-- Test an assertion
     	testAssert = function (self, value, description)
- 168	    if not value then
+ 180	    if not value then
    1	        return failAssert(self, description, 'Test failed: assertion failed')
     	    end
- 167	    return value
+ 179	    return value
     	end
     	
     	-- Expect function f to fail
@@ -326,23 +412,23 @@
     	
     	-- Create the root node for a test scenario
     	local function T (description, process)
-   6	    local root = createNode(nil, description, process)
+   7	    local root = createNode(nil, description, process)
     	    
-   6	    runNode(root)
-  51	    while root.activeNodeIndex <= #root.nodes do
-  45	        local lastActiveBranch = root.lastActiveLeaf.parent
-  45	        lastActiveBranch.activeNodeIndex = lastActiveBranch.activeNodeIndex + 1
-  45	        runNode(root)
+   7	    runNode(root)
+  62	    while root.activeNodeIndex <= #root.nodes do
+  55	        local lastActiveBranch = root.lastActiveLeaf.parent
+  55	        lastActiveBranch.activeNodeIndex = lastActiveBranch.activeNodeIndex + 1
+  55	        runNode(root)
     	    end
     	    
-   6	    return root
+   7	    return root
     	end
     	
     	-- Run any other files passed from CLI.
    1	if arg and arg[0]:gmatch('test.lua') then
    1	    _G.T = T
-   5	    for i = 1, #arg do
-   4	        dofile(arg[i])
+   6	    for i = 1, #arg do
+   5	        dofile(arg[i])
     	    end
    1	    _G.T = nil
     	end
@@ -419,136 +505,92 @@
     	
 
 ==============================================================================
-./spec/ecs.lua
+./spec/event.lua
 ==============================================================================
-   2	T('Given a system and some entities',
-    	function (T)
-  13	  local ecs = require 'knife.ecs'
-    	  
-  13	  local posvel = { 'position', 'velocity' }
-    	  
-  26	  local updatePosition = ecs.system(
-  13	    posvel,
-    	    function (pos, vel)
-  22	      pos.x = pos.x + vel.x
-  22	      pos.y = pos.y + vel.y
-    	    end
-    	  )
-    	  
-  26	  local updateBoundary = ecs.system(
-  13	    posvel,
-    	    function (pos, vel)
-   2	      if pos.y > 40 then
-   1	        vel.y = vel.y * -1
-    	      end
-  15	    end, ecs.reverse
-  13	  )
-    	  
-  13	  local entities = {
-    	    {
-  13	      position = { x = 10, y = 20 }, 
-  13	      velocity = { x = 2, y = 1 }
-  13	    },
-    	    {
-  13	      position = { x = 30, y = 40 }, 
-  13	      velocity = { x = 1, y = 2 }
-    	    }
-  13	  }
+   2	T('Given event module is loaded', function (T)
+  11	    local Event = require 'knife.event'
+  11	    Event.handlers = {}
     	    
-  26	  T('When a system is invoked',
-    	  function (T)
-   1	    updatePosition(entities)
-   2	    T:assert(entities[1].position.x == 12 and entities[2].position.y == 42,
-   1	    'Then the components of the entities are updated')
-    	  end)
-    	  
-  26	  T('When the entities list is cached',
-    	  function (T)
-   6	    ecs.cache(entities)
-    	    
-  12	    T('When a system is invoked',
-    	    function (T)
-   5	      updatePosition(entities)
-  10	      T:assert(entities[1].position.x == 12 and entities[2].position.y == 42,
-   5	      'Then the components of the entities are updated')
-    	      
-  10	      T('When the other system is invoked',
-    	      function (T)
-   1	        updateBoundary(entities)
-   2	        T:assert(entities[2].velocity.y == -2,
-   1	        'Then the components of the entities are updated')
-    	      end)
-    	      
-  10	      T('When a system is invoked a second time',
-    	      function (T)
-   3	        updatePosition(entities)
-   6	        T:assert(entities[1].position.x == 14 and entities[2].position.y == 44,
-   3	        'Then the components of the entities are updated a second time')
+  22	    T('When a handler is registered', function (T)
+    	        local eventArg
+  11	        local fooHandler = Event.on('foo', function (x) eventArg = x end)
     	        
-   6	        T('When the cache is invalidated and a system is invoked a third time',
-    	        function (T)
-   1	          ecs.invalidate(entities)
-   1	          updatePosition(entities)
-   2	          T:assert(entities[1].position.x == 16 and entities[2].position.y == 46,
-   1	          'Then the components of the entities are updated a third time')
+  16	        T('When the event fires', function (T)
+   1	            assert(eventArg == nil)
+   1	            Event.dispatch('foo', 123)
+   1	            T:assert(eventArg == 123, 'Then the handler runs')
     	        end)
     	        
-   6	        T('When the cache is removed and a system is invoked a third time',
-    	        function (T)
-   1	          ecs.uncache(entities)
-   1	          updatePosition(entities)
-   2	          T:assert(entities[1].position.x == 16 and entities[2].position.y == 46,
-   1	          'Then the components of the entities are updated a third time')
+  16	        T('When the handler is removed and the event fires', function (T)
+   1	            fooHandler:remove()
+   1	            assert(eventArg == nil)
+   1	            Event.dispatch('foo', 123)
+   1	            T:assert(eventArg == nil, 'Then the handler does not run')
+    	        end)
+    	            
+  16	        T('When a second handler is registered', function (T)
+    	            local eventArg2
+   6	            local fooHandler2 = Event.on('foo', function (x) eventArg2 = x end)
+    	            
+   8	            T('When the event fires', function (T)
+   1	                assert(eventArg == nil and eventArg2 == nil)
+   1	                Event.dispatch('foo', 123)
+   1	                T:assert(eventArg == 123, 'Then the first handler runs')
+   1	                T:assert(eventArg2 == 123, 'Then the second handler runs')
+    	            end)
+    	            
+   8	            T('When the first handler is removed and the event fires', function (T)
+   1	                fooHandler:remove()
+   1	                assert(eventArg == nil and eventArg2 == nil)
+   1	                Event.dispatch('foo', 123)
+   1	                T:assert(eventArg == nil, 'Then the first handler does not run')
+   1	                T:assert(eventArg2 == 123, 'Then the second handler runs')
+    	            end)
+    	            
+   8	            T('When the second handler is removed and the event fires', function (T)
+   1	                fooHandler2:remove()
+   1	                assert(eventArg == nil and eventArg2 == nil)
+   1	                Event.dispatch('foo', 123)
+   1	                T:assert(eventArg == 123, 'Then the first handler runs')
+   1	                T:assert(eventArg2 == nil, 'Then the second handler does not run')
+    	            end)
+    	            
     	        end)
     	        
-    	      end)
-    	      
+  16	        T('When a second handler returning false is registered', function (T)
+    	            local eventArg2
+   2	            Event.on('foo', function (x) 
+   1	                eventArg2 = x
+   1	                return false 
+    	            end)
+   1	            assert(eventArg == nil and eventArg2 == nil)
+   1	            Event.dispatch('foo', 123)
+   1	            T:assert(eventArg == nil, 'Then the first handler does not run')
+   1	            T:assert(eventArg2 == 123, 'Then the second handler runs')
+    	        end)
+    	        
     	    end)
     	    
-    	  end)
-    	  
-  26	  T('When ecs.each is invoked as an iterator',
-    	  function (T)
-   3	    for pos, vel in ecs.each(entities, posvel) do
-   2	      pos.x = pos.x + vel.x
-   2	      pos.y = pos.y + vel.y
-    	    end
-   2	    T:assert(entities[1].position.x == 12 and entities[2].position.y == 42,
-   1	    'Then the components of the entities are updated')
-    	  end)
-    	  
-  26	  T('When ecs.each is invoked with a callback',
-    	  function (T)
-   2	    ecs.each(entities, posvel, ecs.forward, function (pos, vel)
-   2	      pos.x = pos.x + vel.x
-   2	      pos.y = pos.y + vel.y
-    	    end)
-   2	    T:assert(entities[1].position.x == 12 and entities[2].position.y == 42,
-   1	    'Then the components of the entities are updated')
-    	  end)
-    	  
-  26	  T('When getting an id for an entity',
-    	  function (T)
-   3	    local id1 = ecs.ids[entities[1]]
-   6	    T:assert(id1,
-   3	    'Then the id is returned')
-    	    
-   6	    T('When getting an id for the same entity',
-    	    function (T)
-   1	      local id2 = ecs.ids[entities[1]]
-   2	      T:assert(id1 == id2,
-   1	      'Then the same id is returned')
+  22	    T('When dispatchers are injected into a table', function (T)
+   1	        local t = { bar = true }
+    	        local eventArg
+   1	        Event.injectDispatchers(t)
+   2	        Event.on('bar', function (x) eventArg = x end)
+   1	        assert(eventArg == nil)
+   1	        t.bar(123)
+   1	        T:assert(eventArg == 123, 'Then members of the table dispatch events')
     	    end)
     	    
-   6	    T('When getting the entity from the id',
-    	    function (T)
-   1	      local e = ecs.entities[id1]
-   2	      T:assert(e == entities[1],
-   1	      'Then the same entity is returned')
+  22	    T('When dispatchers are injected into a table by key', function (T)
+   1	        local t = {}
+    	        local eventArg
+   1	        Event.injectDispatchers(t, { 'baz' })
+   2	        Event.on('baz', function (x) eventArg = x end)
+   1	        assert(eventArg == nil)
+   1	        t.baz(123)
+   1	        T:assert(eventArg == 123, 'Then members of the table dispatch events')
     	    end)
-    	  
-    	  end)
-    	  
+    	    
     	end)
 
 ==============================================================================
@@ -745,6 +787,139 @@
     	
 
 ==============================================================================
+./spec/system.lua
+==============================================================================
+   2	T('Given a system and some entities',
+    	function (T)
+  13	  local System = require 'knife.system'
+    	  
+  13	  local posvel = { 'position', 'velocity' }
+    	  
+  26	  local updatePosition = System.create(
+  13	    posvel,
+    	    function (pos, vel)
+  22	      pos.x = pos.x + vel.x
+  22	      pos.y = pos.y + vel.y
+    	    end
+    	  )
+    	  
+  26	  local updateBoundary = System.create(
+  13	    posvel,
+    	    function (pos, vel)
+   2	      if pos.y > 40 then
+   1	        vel.y = vel.y * -1
+    	      end
+  15	    end, System.reverse
+  13	  )
+    	  
+  13	  local entities = {
+    	    {
+  13	      position = { x = 10, y = 20 }, 
+  13	      velocity = { x = 2, y = 1 }
+  13	    },
+    	    {
+  13	      position = { x = 30, y = 40 }, 
+  13	      velocity = { x = 1, y = 2 }
+    	    }
+  13	  }
+    	    
+  26	  T('When a system is invoked',
+    	  function (T)
+   1	    updatePosition(entities)
+   2	    T:assert(entities[1].position.x == 12 and entities[2].position.y == 42,
+   1	    'Then the components of the entities are updated')
+    	  end)
+    	  
+  26	  T('When the entities list is cached',
+    	  function (T)
+   6	    System.cache(entities)
+    	    
+  12	    T('When a system is invoked',
+    	    function (T)
+   5	      updatePosition(entities)
+  10	      T:assert(entities[1].position.x == 12 and entities[2].position.y == 42,
+   5	      'Then the components of the entities are updated')
+    	      
+  10	      T('When the other system is invoked',
+    	      function (T)
+   1	        updateBoundary(entities)
+   2	        T:assert(entities[2].velocity.y == -2,
+   1	        'Then the components of the entities are updated')
+    	      end)
+    	      
+  10	      T('When a system is invoked a second time',
+    	      function (T)
+   3	        updatePosition(entities)
+   6	        T:assert(entities[1].position.x == 14 and entities[2].position.y == 44,
+   3	        'Then the components of the entities are updated a second time')
+    	        
+   6	        T('When the cache is invalidated and a system is invoked a third time',
+    	        function (T)
+   1	          System.invalidate(entities)
+   1	          updatePosition(entities)
+   2	          T:assert(entities[1].position.x == 16 and entities[2].position.y == 46,
+   1	          'Then the components of the entities are updated a third time')
+    	        end)
+    	        
+   6	        T('When the cache is removed and a system is invoked a third time',
+    	        function (T)
+   1	          System.uncache(entities)
+   1	          updatePosition(entities)
+   2	          T:assert(entities[1].position.x == 16 and entities[2].position.y == 46,
+   1	          'Then the components of the entities are updated a third time')
+    	        end)
+    	        
+    	      end)
+    	      
+    	    end)
+    	    
+    	  end)
+    	  
+  26	  T('When System.each is invoked as an iterator',
+    	  function (T)
+   3	    for pos, vel in System.each(entities, posvel) do
+   2	      pos.x = pos.x + vel.x
+   2	      pos.y = pos.y + vel.y
+    	    end
+   2	    T:assert(entities[1].position.x == 12 and entities[2].position.y == 42,
+   1	    'Then the components of the entities are updated')
+    	  end)
+    	  
+  26	  T('When System.each is invoked with a callback',
+    	  function (T)
+   2	    System.each(entities, posvel, System.forward, function (pos, vel)
+   2	      pos.x = pos.x + vel.x
+   2	      pos.y = pos.y + vel.y
+    	    end)
+   2	    T:assert(entities[1].position.x == 12 and entities[2].position.y == 42,
+   1	    'Then the components of the entities are updated')
+    	  end)
+    	  
+  26	  T('When getting an id for an entity',
+    	  function (T)
+   3	    local id1 = System.ids[entities[1]]
+   6	    T:assert(id1,
+   3	    'Then the id is returned')
+    	    
+   6	    T('When getting an id for the same entity',
+    	    function (T)
+   1	      local id2 = System.ids[entities[1]]
+   2	      T:assert(id1 == id2,
+   1	      'Then the same id is returned')
+    	    end)
+    	    
+   6	    T('When getting the entity from the id',
+    	    function (T)
+   1	      local e = System.entities[id1]
+   2	      T:assert(e == entities[1],
+   1	      'Then the same entity is returned')
+    	    end)
+    	  
+    	  end)
+    	  
+    	end)
+
+==============================================================================
 ./spec/test.lua
 ==============================================================================
    2	T('Given an empty table', 
@@ -822,12 +997,14 @@ Summary
 ==============================================================================
 
 8	0	100.00%	./knife/base.lua
-63	0	100.00%	./knife/ecs.lua
+36	0	100.00%	./knife/event.lua
 34	0	100.00%	./knife/memoize.lua
+63	0	100.00%	./knife/system.lua
 62	0	100.00%	./knife/test.lua
 39	0	100.00%	./spec/base.lua
-72	0	100.00%	./spec/ecs.lua
+55	0	100.00%	./spec/event.lua
 111	0	100.00%	./spec/memoize.lua
+72	0	100.00%	./spec/system.lua
 42	0	100.00%	./spec/test.lua
 ------------------------
-431	0	100.00%	
+522	0	100.00%	

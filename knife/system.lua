@@ -1,10 +1,10 @@
-local ecs = {}
+local System = {}
 
 local cache = setmetatable({}, { __mode = 'k' })
 
-ecs.forward = ipairs
+System.forward = ipairs
 
-function ecs.reverse (list)
+function System.reverse (list)
     local function reverse (list, index)
         if index <= 1 then return end
         index = index - 1
@@ -34,7 +34,7 @@ local function extractComponentsList (entities, aspects, iterator)
     local cached = cache[entities]
     
     if not iterator then
-        iterator = ecs.forward
+        iterator = System.forward
     end
     
     if cached and cached[aspects] and cached[aspects][iterator] then 
@@ -80,7 +80,7 @@ local function traverse (entities, aspects, iterator, process, ...)
     return context
 end
 
-function ecs.each (entities, aspects, iterator, process, ...) 
+function System.each (entities, aspects, iterator, process, ...) 
     if process then
         return traverse(entities, aspects, iterator, process, ...) 
     else 
@@ -90,39 +90,39 @@ function ecs.each (entities, aspects, iterator, process, ...)
     end
 end
 
-function ecs.system (aspects, process, iterator)
+function System.create (aspects, process, iterator)
     return function (entities, ...)
         return traverse(entities, aspects, iterator, process, ...)
     end
 end
 
-function ecs.cache (entities)
+function System.cache (entities)
     cache[entities] = setmetatable({}, { __mode = 'k' })
 end
 
-function ecs.invalidate (entities)
+function System.invalidate (entities)
     if cache[entities] then
-        ecs.cache (entities)
+        System.cache (entities)
     end
 end
 
-function ecs.uncache (entities)
+function System.uncache (entities)
     cache[entities] = nil
 end
 
 local entityMaxId = 0
 
-ecs.entities = setmetatable({}, { __mode = 'v' })
+System.entities = setmetatable({}, { __mode = 'v' })
 
-ecs.ids = setmetatable({}, { 
+System.ids = setmetatable({}, { 
     __mode = 'k', 
     __index = function(self, entity) 
         entityMaxId = entityMaxId + 1
         self[entity] = entityMaxId
-        ecs.entities[entityMaxId] = entity
+        System.entities[entityMaxId] = entity
         return entityMaxId
     end
 })
 
-return ecs
+return System
 
