@@ -76,8 +76,6 @@ local function traverse (entities, aspects, iterator, process, ...)
     for index, components in ipairs(componentsList) do
         process(unpackArgs(components, 1, ...))
     end
-    
-    return context
 end
 
 function System.each (entities, aspects, iterator, process, ...) 
@@ -124,5 +122,7 @@ System.ids = setmetatable({}, {
     end
 })
 
-return System
+return setmetatable(System, { __call = function (System, ...)
+    return System.create(...)
+end })
 
