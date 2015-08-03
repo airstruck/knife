@@ -252,8 +252,6 @@
   42	    for index, components in ipairs(componentsList) do
   28	        process(unpackArgs(components, 1, ...))
     	    end
-    	    
-  14	    return context
     	end
     	
    1	function System.each (entities, aspects, iterator, process, ...) 
@@ -300,7 +298,9 @@
     	    end
    1	})
     	
-   1	return System
+   2	return setmetatable(System, { __call = function (System, ...)
+  13	    return System.create(...)
+   2	end })
     	
 
 ==============================================================================
@@ -803,7 +803,7 @@
     	    end
     	  )
     	  
-  26	  local updateBoundary = System.create(
+  26	  local updateBoundary = System(
   13	    posvel,
     	    function (pos, vel)
    2	      if pos.y > 40 then
@@ -999,7 +999,7 @@ Summary
 8	0	100.00%	./knife/base.lua
 36	0	100.00%	./knife/event.lua
 34	0	100.00%	./knife/memoize.lua
-63	0	100.00%	./knife/system.lua
+64	0	100.00%	./knife/system.lua
 62	0	100.00%	./knife/test.lua
 39	0	100.00%	./spec/base.lua
 55	0	100.00%	./spec/event.lua
@@ -1007,4 +1007,4 @@ Summary
 72	0	100.00%	./spec/system.lua
 42	0	100.00%	./spec/test.lua
 ------------------------
-522	0	100.00%	
+523	0	100.00%	
