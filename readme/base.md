@@ -44,7 +44,7 @@ Instantiate your classes.
 
 All classes extend the base class. The base class has only two members, `extend` and `constructor`.
 
-All class members are visible to both the class and the instance -- there is no seperation between 'static' and 'instance' scopes. It's up to the user to document and use members appropriately.
+All class members are visible to both the class and the instance -- there is no separation between 'static' and 'instance' scopes. It's up to the user to document and use members appropriately.
 
 Because of this, `object:extend()` will create a subclass of an object, which can be instantiated. This is probably not useful.
 
