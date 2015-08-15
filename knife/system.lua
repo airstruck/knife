@@ -44,6 +44,10 @@ local function traverse (entities, aspects, process, invoke, ...)
     for index = 1, #entities do
         local entity = entities[index]
 
+        if not entity then
+            break
+        end
+
         if checkAspects(entity, aspects) then
 
             local shouldRemove, newEnts = invoke(
@@ -61,6 +65,11 @@ local function traverse (entities, aspects, process, invoke, ...)
                     newEntityGroups = {}
                 end
                 newEntityGroups[#newEntityGroups + 1] = newEnts
+            end
+
+            -- if entity at current index has changed, decrement index
+            if entity ~= entities[index] then
+                index = index - 1
             end
 
         end
