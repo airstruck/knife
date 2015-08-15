@@ -1,3 +1,5 @@
+local loadstring = _G.loadstring or _G.load
+
 local function removeEntities (entities, indicesToRemove)
     local indicesToRemoveIndex = #indicesToRemove
 
