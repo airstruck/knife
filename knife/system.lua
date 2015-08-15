@@ -1,5 +1,3 @@
-local System = {}
-
 local function removeEntities (entities, indicesToRemove)
     local indicesToRemoveIndex = #indicesToRemove
 
@@ -81,11 +79,12 @@ end
 local function generateProcessInvoker (aspects)
     local args = {}
 
-    for _, aspect in ipairs(aspects) do
+    for index = 1, #aspects do
+        local aspect = aspects[index]
         if hasInitialUnderscore(aspect) then
-            args[#args + 1] = aspect
+            args[index] = aspect
         else
-            args[#args + 1] = ('_entity[%q]'):format(aspect)
+            args[index] = ('_entity[%q]'):format(aspect)
         end
     end
     local template = [[
@@ -98,27 +97,9 @@ local function generateProcessInvoker (aspects)
     return loadstring(source)()
 end
 
-function System.create (aspects, process)
+return function (aspects, process)
     local invoke = generateProcessInvoker(aspects)
     return function (entities, ...)
         return traverse(entities, aspects, process, invoke, ...)
     end
 end
-
-local entityMaxId = 0
-
-System.entities = setmetatable({}, { __mode = 'v' })
-
-System.ids = setmetatable({}, {
-    __mode = 'k',
-    __index = function(self, entity)
-        entityMaxId = entityMaxId + 1
-        self[entity] = entityMaxId
-        System.entities[entityMaxId] = entity
-        return entityMaxId
-    end
-})
-
-return setmetatable(System, { __call = function (System, ...)
-    return System.create(...)
-end })
