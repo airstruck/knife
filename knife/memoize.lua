@@ -1,4 +1,4 @@
-local unpack = table.unpack or _G.unpack
+local loadstring = _G.loadstring or _G.load
 local weakKeys = { __mode = 'k' }
 local cache = setmetatable({}, weakKeys)
 local resultsKey = {}
