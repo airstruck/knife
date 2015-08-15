@@ -1,120 +1,117 @@
 local System = {}
 
-local cache = setmetatable({}, { __mode = 'k' })
+local function removeEntities (entities, indicesToRemove)
+    local indicesToRemoveIndex = #indicesToRemove
 
-System.forward = ipairs
-
-function System.reverse (list)
-    local function reverse (list, index)
-        if index <= 1 then return end
-        index = index - 1
-        return index, list[index]
+    for entityIndex = #entities, 1, -1 do
+        if indicesToRemove[indicesToRemoveIndex] == entityIndex then
+            indicesToRemoveIndex = indicesToRemoveIndex - 1
+            table.remove(entities, entityIndex)
+        end
     end
-    
-    return reverse, list, #list + 1
 end
 
-local function extractComponent (context, entity, aspect) 
-    return context[aspect] or entity[aspect]
+local function createEntities (entities, newEntityGroups)
+    local entitiesIndex = #entities
+
+    for groupIndex = 1, #newEntityGroups do
+        local group = newEntityGroups[groupIndex]
+        for newEntityIndex = 1, #group do
+            entitiesIndex = entitiesIndex + 1
+            entities[entitiesIndex] = group[newEntityIndex]
+        end
+    end
 end
 
-local function extractComponents (context, entity, aspects) 
-    local components = {}
-    
-    for index, aspect in ipairs(aspects) do
-        local component = extractComponent(context, entity, aspect) 
-        if not component then return end
-        components[index] = component
-    end
-    
-    return components
+local underscoreByteValue = ('_'):byte()
+
+local function hasInitialUnderscore (value)
+    return type(value) == 'string' and value:byte() == underscoreByteValue
 end
 
-local function extractComponentsList (entities, aspects, iterator) 
-    local cached = cache[entities]
-    
-    if not iterator then
-        iterator = System.forward
+local function checkAspects (entity, aspects)
+    for index = 1, #aspects do
+        local aspect = aspects[index]
+        if entity[aspect] == nil and not hasInitialUnderscore(aspect) then
+            return false
+        end
     end
-    
-    if cached and cached[aspects] and cached[aspects][iterator] then 
-        return cached[aspects][iterator]
+    return true
+end
+
+local function traverse (entities, aspects, process, invoke, ...)
+    local indicesToRemove
+    local newEntityGroups
+
+    for index = 1, #entities do
+        local entity = entities[index]
+
+        if checkAspects(entity, aspects) then
+
+            local shouldRemove, newEnts = invoke(
+                process, entity, entities, index, ...)
+
+            if shouldRemove then
+                if not indicesToRemove then
+                    indicesToRemove = {}
+                end
+                indicesToRemove[#indicesToRemove + 1] = index
+            end
+
+            if newEnts then
+                if not newEntityGroups then
+                    newEntityGroups = {}
+                end
+                newEntityGroups[#newEntityGroups + 1] = newEnts
+            end
+
+        end
+
     end
-    
-    local list = {}
-    local context = { _entities = entities }
-    
-    for index, entity in iterator(entities) do
-        context._index = index
-        context._entity = entity
-        list[#list + 1] = extractComponents(context, entity, aspects)
+
+    if indicesToRemove then
+        removeEntities(entities, indicesToRemove)
     end
-    
-    if cached then
-        if cached[aspects] then
-            cached[aspects][iterator] = list
+
+    if newEntityGroups then
+        createEntities(entities, newEntityGroups)
+    end
+end
+
+local function generateProcessInvoker (aspects)
+    local args = {}
+
+    for _, aspect in ipairs(aspects) do
+        if hasInitialUnderscore(aspect) then
+            args[#args + 1] = aspect
         else
-            cached[aspects] = setmetatable({ [iterator] = list },
-                { __mode = 'k' })
-        end 
+            args[#args + 1] = ('_entity[%q]'):format(aspect)
+        end
     end
-    
-    return list
+    local template = [[
+        return function (_process, _entity, _entities, _index, ...)
+            return _process(%s, ...)
+        end
+    ]]
+    local source = (template):format(table.concat(args, ', '))
+
+    return loadstring(source)()
 end
 
-local function unpackArgs (list, index, ...)
-    if index > #list then
-        return ... 
-    end
-    
-    return list[index], unpackArgs(list, index + 1, ...)
-end
-
-local function traverse (entities, aspects, iterator, process, ...)
-    local componentsList = extractComponentsList(entities, aspects, iterator)
-    
-    for index, components in ipairs(componentsList) do
-        process(unpackArgs(components, 1, ...))
-    end
-end
-
-function System.each (entities, aspects, iterator, process, ...) 
-    if process then
-        return traverse(entities, aspects, iterator, process, ...) 
-    else 
-        return coroutine.wrap(function ()
-            traverse(entities, aspects, iterator, coroutine.yield)
-        end)
-    end
-end
-
-function System.create (aspects, process, iterator)
+function System.create (aspects, process)
+    local invoke = generateProcessInvoker(aspects)
     return function (entities, ...)
-        return traverse(entities, aspects, iterator, process, ...)
+        return traverse(entities, aspects, process, invoke, ...)
     end
-end
-
-function System.cache (entities)
-    cache[entities] = setmetatable({}, { __mode = 'k' })
-end
-
-function System.invalidate (entities)
-    if cache[entities] then
-        System.cache (entities)
-    end
-end
-
-function System.uncache (entities)
-    cache[entities] = nil
 end
 
 local entityMaxId = 0
 
 System.entities = setmetatable({}, { __mode = 'v' })
 
-System.ids = setmetatable({}, { 
-    __mode = 'k', 
-    __index = function(self, entity) 
+System.ids = setmetatable({}, {
+    __mode = 'k',
+    __index = function(self, entity)
         entityMaxId = entityMaxId + 1
         self[entity] = entityMaxId
         System.entities[entityMaxId] = entity
@@ -125,4 +122,3 @@ System.ids = setmetatable({}, {
 return setmetatable(System, { __call = function (System, ...)
     return System.create(...)
 end })
-
