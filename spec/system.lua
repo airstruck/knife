@@ -1,129 +1,88 @@
 T('Given a system and some entities',
 function (T)
   local System = require 'knife.system'
-  
+
+
+    local e1 = {
+        position = { x = 10, y = 20 },
+    }
+    local e2 = {
+        position = { x = 30, y = 40 },
+        velocity = { x = 1, y = 2 }
+    }
+    local e3 = {
+        position = { x = 1, y = 2 },
+        velocity = { x = 2, y = 1 }
+    }
+
   local posvel = { 'position', 'velocity' }
-  
-  local updatePosition = System.create(
+
+  local updatePosition = System(
     posvel,
     function (pos, vel)
       pos.x = pos.x + vel.x
       pos.y = pos.y + vel.y
     end
   )
-  
+
   local updateBoundary = System(
     posvel,
     function (pos, vel)
       if pos.y > 40 then
-        vel.y = vel.y * -1
+        return true
       end
-    end, System.reverse
+    end
   )
-  
-  local entities = {
-    {
-      position = { x = 10, y = 20 }, 
-      velocity = { x = 2, y = 1 }
-    },
-    {
-      position = { x = 30, y = 40 }, 
-      velocity = { x = 1, y = 2 }
-    }
-  }
-    
-  T('When a system is invoked',
-  function (T)
-    updatePosition(entities)
-    T:assert(entities[1].position.x == 12 and entities[2].position.y == 42,
-    'Then the components of the entities are updated')
-  end)
-  
-  T('When the entities list is cached',
-  function (T)
-    System.cache(entities)
-    
+
+  local addStuff = System(
+    posvel,
+    function (pos, vel)
+      return false, { e3 }
+    end
+  )
+
+    local manualRemove = System(
+      { 'position', '_index', '_entities' },
+      function (pos, i, e)
+        if i == 1 then
+            table.remove(e, i)
+        end
+      end
+    )
+
+
+    local entities = { e1, e2 }
+
     T('When a system is invoked',
     function (T)
-      updatePosition(entities)
-      T:assert(entities[1].position.x == 12 and entities[2].position.y == 42,
-      'Then the components of the entities are updated')
-      
-      T('When the other system is invoked',
-      function (T)
-        updateBoundary(entities)
-        T:assert(entities[2].velocity.y == -2,
-        'Then the components of the entities are updated')
-      end)
-      
-      T('When a system is invoked a second time',
-      function (T)
         updatePosition(entities)
-        T:assert(entities[1].position.x == 14 and entities[2].position.y == 44,
-        'Then the components of the entities are updated a second time')
-        
-        T('When the cache is invalidated and a system is invoked a third time',
-        function (T)
-          System.invalidate(entities)
-          updatePosition(entities)
-          T:assert(entities[1].position.x == 16 and entities[2].position.y == 46,
-          'Then the components of the entities are updated a third time')
-        end)
-        
-        T('When the cache is removed and a system is invoked a third time',
-        function (T)
-          System.uncache(entities)
-          updatePosition(entities)
-          T:assert(entities[1].position.x == 16 and entities[2].position.y == 46,
-          'Then the components of the entities are updated a third time')
-        end)
-        
-      end)
-      
+        T:assert(entities[2].position.y == 42,
+        'Then the components of the entities are updated')
     end)
-    
-  end)
-  
-  T('When System.each is invoked as an iterator',
-  function (T)
-    for pos, vel in System.each(entities, posvel) do
-      pos.x = pos.x + vel.x
-      pos.y = pos.y + vel.y
-    end
-    T:assert(entities[1].position.x == 12 and entities[2].position.y == 42,
-    'Then the components of the entities are updated')
-  end)
-  
-  T('When System.each is invoked with a callback',
-  function (T)
-    System.each(entities, posvel, System.forward, function (pos, vel)
-      pos.x = pos.x + vel.x
-      pos.y = pos.y + vel.y
-    end)
-    T:assert(entities[1].position.x == 12 and entities[2].position.y == 42,
-    'Then the components of the entities are updated')
-  end)
-  
-  T('When getting an id for an entity',
-  function (T)
-    local id1 = System.ids[entities[1]]
-    T:assert(id1,
-    'Then the id is returned')
-    
-    T('When getting an id for the same entity',
+
+    T('When a process returns a truthy value',
     function (T)
-      local id2 = System.ids[entities[1]]
-      T:assert(id1 == id2,
-      'Then the same id is returned')
+        assert(#entities == 2)
+        updatePosition(entities)
+        updateBoundary(entities)
+        T:assert(#entities == 1 and entities[1] == e1,
+        'Then the current entity is removed')
     end)
-    
-    T('When getting the entity from the id',
+
+    T('When a process manually removes an entity',
     function (T)
-      local e = System.entities[id1]
-      T:assert(e == entities[1],
-      'Then the same entity is returned')
+        assert(#entities == 2)
+        manualRemove(entities)
+        T:assert(#entities == 1 and entities[1] == e2,
+        'Then the entity is removed')
     end)
-  
-  end)
-  
+
+    T('When a process returns new entities',
+    function (T)
+        assert(#entities == 2)
+        addStuff(entities)
+        T:assert(entities[3] == e3,
+        'Then the new entities are added')
+    end)
+
 end)

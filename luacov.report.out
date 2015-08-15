@@ -116,21 +116,34 @@
   64	    return meta and meta.__call
     	end
     	
-    	local function tuple (...)
-  21	    local values = { ... }
-  21	    local count = select('#', ...)
-    	    return function ()
-  44	        return unpack(values, 1, count)
+   1	local tupleConstructorCache = {}
+    	
+    	local function buildTupleConstructor (n)
+  21	    if tupleConstructorCache[n] then
+  18	        return tupleConstructorCache[n]
     	    end
+   3	    local t = {}
+   9	    for i = 1, n do
+   6	        t[i] = "a" .. i
+    	    end
+   3	    local args = table.concat(t, ',')
+   6	    local ctor = loadstring('return function(' .. args ..
+   6	        ') return function() return ' .. args .. ' end end')()
+   3	    tupleConstructorCache[n] = ctor
+   3	    return ctor
+    	end
+    	
+    	local function tuple (...)
+  21	    return buildTupleConstructor(select('#', ...))(...)
     	end
     	
     	return function (callable)
   54	    local metaCall = getMetaCall(callable)
-    	    
+    	
   54	    if type(callable) ~= 'function' and not metaCall then
    4	        error 'Attempted to memoize a non-callable value.'
     	    end
-    	    
+    	
   50	    cache[callable] = setmetatable({}, weakKeys)
     	
     	    local function run (...)
@@ -146,162 +159,147 @@
     	            end
   71	            node = node[key]
     	        end
-    	        
-  45	        if not node[resultsKey] then 
+    	
+  45	        if not node[resultsKey] then
   22	            node[resultsKey] = tuple(callable(...))
     	        end
-    	        
+    	
   44	        return node[resultsKey]()
     	    end
-    	    
-  50	    if metaCall then 
+    	
+  50	    if metaCall then
     	        return function (...)
   10	            local call = getMetaCall(callable)
-    	            
+    	
   10	            if call ~= metaCall then
    2	                cache[callable] = setmetatable({}, weakKeys)
    2	                metaCall = call
     	            end
-    	            
+    	
   10	            return run(...)
   16	        end, cache, resultsKey, nilKey
     	    end
-    	    
+    	
   34	    return run, cache, resultsKey, nilKey
     	end
-    	
 
 ==============================================================================
 ./knife/system.lua
 ==============================================================================
-   1	local System = {}
+    	local function removeEntities (entities, indicesToRemove)
+   1	    local indicesToRemoveIndex = #indicesToRemove
     	
-   1	local cache = setmetatable({}, { __mode = 'k' })
-    	
-   1	System.forward = ipairs
-    	
-   1	function System.reverse (list)
-    	    local function reverse (list, index)
-   3	        if index <= 1 then return end
-   2	        index = index - 1
-   2	        return index, list[index]
+   3	    for entityIndex = #entities, 1, -1 do
+   2	        if indicesToRemove[indicesToRemoveIndex] == entityIndex then
+   1	            indicesToRemoveIndex = indicesToRemoveIndex - 1
+   1	            table.remove(entities, entityIndex)
+    	        end
     	    end
-    	    
-   1	    return reverse, list, #list + 1
     	end
     	
-    	local function extractComponent (context, entity, aspect) 
-  44	    return context[aspect] or entity[aspect]
+    	local function createEntities (entities, newEntityGroups)
+   1	    local entitiesIndex = #entities
+    	
+   2	    for groupIndex = 1, #newEntityGroups do
+   1	        local group = newEntityGroups[groupIndex]
+   2	        for newEntityIndex = 1, #group do
+   1	            entitiesIndex = entitiesIndex + 1
+   1	            entities[entitiesIndex] = group[newEntityIndex]
+    	        end
+    	    end
     	end
     	
-    	local function extractComponents (context, entity, aspects) 
-  22	    local components = {}
-    	    
-  66	    for index, aspect in ipairs(aspects) do
-  44	        local component = extractComponent(context, entity, aspect) 
-  44	        if not component then return end
-  44	        components[index] = component
-    	    end
-    	    
-  22	    return components
+   1	local underscoreByteValue = ('_'):byte()
+    	
+    	local function hasInitialUnderscore (value)
+  51	    return type(value) == 'string' and value:byte() == underscoreByteValue
     	end
     	
-    	local function extractComponentsList (entities, aspects, iterator) 
-  14	    local cached = cache[entities]
-    	    
-  14	    if not iterator then
-  12	        iterator = System.forward
+    	local function checkAspects (entity, aspects)
+  24	    for index = 1, #aspects do
+  19	        local aspect = aspects[index]
+  19	        if entity[aspect] == nil and not hasInitialUnderscore(aspect) then
+   4	            return false
+    	        end
     	    end
-    	    
-  14	    if cached and cached[aspects] and cached[aspects][iterator] then 
-   3	        return cached[aspects][iterator]
+   5	    return true
+    	end
+    	
+    	local function traverse (entities, aspects, process, invoke, ...)
+    	    local indicesToRemove
+    	    local newEntityGroups
+    	
+  14	    for index = 1, #entities do
+  10	        local entity = entities[index]
+    	
+  10	        if not entity then
+   1	            break
+    	        end
+    	
+   9	        if checkAspects(entity, aspects) then
+    	
+  10	            local shouldRemove, newEnts = invoke(
+   5	                process, entity, entities, index, ...)
+    	
+   5	            if shouldRemove then
+   1	                if not indicesToRemove then
+   1	                    indicesToRemove = {}
+    	                end
+   1	                indicesToRemove[#indicesToRemove + 1] = index
+    	            end
+    	
+   5	            if newEnts then
+   1	                if not newEntityGroups then
+   1	                    newEntityGroups = {}
+    	                end
+   1	                newEntityGroups[#newEntityGroups + 1] = newEnts
+    	            end
+    	
+    	            -- if entity at current index has changed, decrement index
+   5	            if entity ~= entities[index] then
+   1	                index = index - 1
+    	            end
+    	
+    	        end
+    	
     	    end
-    	    
-  11	    local list = {}
-  11	    local context = { _entities = entities }
-    	    
-  33	    for index, entity in iterator(entities) do
-  22	        context._index = index
-  22	        context._entity = entity
-  22	        list[#list + 1] = extractComponents(context, entity, aspects)
+    	
+   5	    if indicesToRemove then
+   1	        removeEntities(entities, indicesToRemove)
     	    end
-    	    
-  11	    if cached then
-   7	        if cached[aspects] then
-   1	            cached[aspects][iterator] = list
+    	
+   5	    if newEntityGroups then
+   1	        createEntities(entities, newEntityGroups)
+    	    end
+    	end
+    	
+    	local function generateProcessInvoker (aspects)
+  20	    local args = {}
+    	
+  65	    for index = 1, #aspects do
+  45	        local aspect = aspects[index]
+  45	        if hasInitialUnderscore(aspect) then
+  10	            args[index] = aspect
     	        else
-  12	            cached[aspects] = setmetatable({ [iterator] = list },
-  12	                { __mode = 'k' })
-    	        end 
+  35	            args[index] = ('_entity[%q]'):format(aspect)
+    	        end
     	    end
-    	    
-  11	    return list
+    	    local template = [[
+    	        return function (_process, _entity, _entities, _index, ...)
+    	            return _process(%s, ...)
+    	        end
+  20	    ]]
+  20	    local source = (template):format(table.concat(args, ', '))
+    	
+  20	    return loadstring(source)()
     	end
     	
-    	local function unpackArgs (list, index, ...)
-  84	    if index > #list then
-  28	        return ... 
-    	    end
-    	    
-  56	    return list[index], unpackArgs(list, index + 1, ...)
-    	end
-    	
-    	local function traverse (entities, aspects, iterator, process, ...)
-  14	    local componentsList = extractComponentsList(entities, aspects, iterator)
-    	    
-  42	    for index, components in ipairs(componentsList) do
-  28	        process(unpackArgs(components, 1, ...))
-    	    end
-    	end
-    	
-   1	function System.each (entities, aspects, iterator, process, ...) 
-   2	    if process then
-   1	        return traverse(entities, aspects, iterator, process, ...) 
-    	    else 
-   2	        return coroutine.wrap(function ()
-   1	            traverse(entities, aspects, iterator, coroutine.yield)
-    	        end)
-    	    end
-    	end
-    	
-   1	function System.create (aspects, process, iterator)
+    	return function (aspects, process)
+  20	    local invoke = generateProcessInvoker(aspects)
     	    return function (entities, ...)
-  12	        return traverse(entities, aspects, iterator, process, ...)
+   5	        return traverse(entities, aspects, process, invoke, ...)
     	    end
     	end
-    	
-   1	function System.cache (entities)
-   7	    cache[entities] = setmetatable({}, { __mode = 'k' })
-    	end
-    	
-   1	function System.invalidate (entities)
-   1	    if cache[entities] then
-   1	        System.cache (entities)
-    	    end
-    	end
-    	
-   1	function System.uncache (entities)
-   1	    cache[entities] = nil
-    	end
-    	
-   1	local entityMaxId = 0
-    	
-   1	System.entities = setmetatable({}, { __mode = 'v' })
-    	
-   2	System.ids = setmetatable({}, { 
-   1	    __mode = 'k', 
-    	    __index = function(self, entity) 
-   3	        entityMaxId = entityMaxId + 1
-   3	        self[entity] = entityMaxId
-   3	        System.entities[entityMaxId] = entity
-   3	        return entityMaxId
-    	    end
-   1	})
-    	
-   2	return setmetatable(System, { __call = function (System, ...)
-  13	    return System.create(...)
-   2	end })
-    	
 
 ==============================================================================
 ./knife/test.lua
@@ -310,52 +308,52 @@
     	
     	-- Create a node representing a test section
     	local function createNode (parent, description, process)
- 124	    return setmetatable({
-  62	        parent = parent,
-  62	        description = description,
-  62	        process = process,
-  62	        nodes = {},
-  62	        activeNodeIndex = 1,
-  62	        currentNodeIndex = 0,
-  62	        assert = testAssert,
-  62	        error = testError,
- 124	    }, { __call = test })
+ 108	    return setmetatable({
+  54	        parent = parent,
+  54	        description = description,
+  54	        process = process,
+  54	        nodes = {},
+  54	        activeNodeIndex = 1,
+  54	        currentNodeIndex = 0,
+  54	        assert = testAssert,
+  54	        error = testError,
+ 108	    }, { __call = test })
     	end
     	
     	-- Run a node
     	local function runNode (node)
- 165	    node.currentNodeIndex = 0
- 165	    return node:process()
+ 136	    node.currentNodeIndex = 0
+ 136	    return node:process()
     	end
     	
     	-- Get the root node for a given node
     	local function getRootNode (node) 
- 168	    local parent = node.parent
- 168	    return parent and getRootNode(parent) or node
+ 126	    local parent = node.parent
+ 126	    return parent and getRootNode(parent) or node
     	end
     	
     	-- Update the active child node of the given node
     	local function updateActiveNode (node, description, process) 
- 103	    local activeNodeIndex = node.activeNodeIndex
- 103	    local nodes = node.nodes
- 103	    local activeNode = nodes[activeNodeIndex]
+  82	    local activeNodeIndex = node.activeNodeIndex
+  82	    local nodes = node.nodes
+  82	    local activeNode = nodes[activeNodeIndex]
     	
- 103	    if not activeNode then
-  55	        activeNode = createNode(node, description, process)
-  55	        nodes[activeNodeIndex] = activeNode
+  82	    if not activeNode then
+  47	        activeNode = createNode(node, description, process)
+  47	        nodes[activeNodeIndex] = activeNode
     	    else 
-  48	        activeNode.process = process
+  35	        activeNode.process = process
     	    end
     	    
- 103	    getRootNode(node).lastActiveLeaf = activeNode
+  82	    getRootNode(node).lastActiveLeaf = activeNode
     	
- 103	    return activeNode
+  82	    return activeNode
     	end
     	
     	-- Run the active child node of the given node
     	local function runActiveNode (node, description, process) 
- 103	    local activeNode = updateActiveNode(node, description, process)
- 103	    return runNode(activeNode)
+  82	    local activeNode = updateActiveNode(node, description, process)
+  82	    return runNode(activeNode)
     	end
     	
     	-- Get ancestors of a node, including the node
@@ -389,18 +387,18 @@
     	
     	-- Create a branch node for a test scenario
     	test = function (node, description, process) 
- 425	    node.currentNodeIndex = node.currentNodeIndex + 1
- 425	    if node.currentNodeIndex == node.activeNodeIndex then
- 103	        return runActiveNode(node, description, process) 
+ 352	    node.currentNodeIndex = node.currentNodeIndex + 1
+ 352	    if node.currentNodeIndex == node.activeNodeIndex then
+  82	        return runActiveNode(node, description, process) 
     	    end
     	end
     	
     	-- Test an assertion
     	testAssert = function (self, value, description)
- 180	    if not value then
+ 165	    if not value then
    1	        return failAssert(self, description, 'Test failed: assertion failed')
     	    end
- 179	    return value
+ 164	    return value
     	end
     	
     	-- Expect function f to fail
@@ -415,10 +413,10 @@
    7	    local root = createNode(nil, description, process)
     	    
    7	    runNode(root)
-  62	    while root.activeNodeIndex <= #root.nodes do
-  55	        local lastActiveBranch = root.lastActiveLeaf.parent
-  55	        lastActiveBranch.activeNodeIndex = lastActiveBranch.activeNodeIndex + 1
-  55	        runNode(root)
+  54	    while root.activeNodeIndex <= #root.nodes do
+  47	        local lastActiveBranch = root.lastActiveLeaf.parent
+  47	        lastActiveBranch.activeNodeIndex = lastActiveBranch.activeNodeIndex + 1
+  47	        runNode(root)
     	    end
     	    
    7	    return root
@@ -791,132 +789,91 @@
 ==============================================================================
    2	T('Given a system and some entities',
     	function (T)
-  13	  local System = require 'knife.system'
-    	  
-  13	  local posvel = { 'position', 'velocity' }
-    	  
-  26	  local updatePosition = System.create(
-  13	    posvel,
+   5	  local System = require 'knife.system'
+    	
+    	
+   5	    local e1 = {
+   5	        position = { x = 10, y = 20 },
+    	    }
+   5	    local e2 = {
+   5	        position = { x = 30, y = 40 },
+   5	        velocity = { x = 1, y = 2 }
+    	    }
+   5	    local e3 = {
+   5	        position = { x = 1, y = 2 },
+   5	        velocity = { x = 2, y = 1 }
+    	    }
+    	
+   5	  local posvel = { 'position', 'velocity' }
+    	
+  10	  local updatePosition = System(
+   5	    posvel,
     	    function (pos, vel)
-  22	      pos.x = pos.x + vel.x
-  22	      pos.y = pos.y + vel.y
+   2	      pos.x = pos.x + vel.x
+   2	      pos.y = pos.y + vel.y
     	    end
     	  )
-    	  
-  26	  local updateBoundary = System(
-  13	    posvel,
+    	
+  10	  local updateBoundary = System(
+   5	    posvel,
     	    function (pos, vel)
-   2	      if pos.y > 40 then
-   1	        vel.y = vel.y * -1
+   1	      if pos.y > 40 then
+   1	        return true
     	      end
-  15	    end, System.reverse
-  13	  )
-    	  
-  13	  local entities = {
-    	    {
-  13	      position = { x = 10, y = 20 }, 
-  13	      velocity = { x = 2, y = 1 }
-  13	    },
-    	    {
-  13	      position = { x = 30, y = 40 }, 
-  13	      velocity = { x = 1, y = 2 }
-    	    }
-  13	  }
-    	    
-  26	  T('When a system is invoked',
-    	  function (T)
-   1	    updatePosition(entities)
-   2	    T:assert(entities[1].position.x == 12 and entities[2].position.y == 42,
-   1	    'Then the components of the entities are updated')
-    	  end)
-    	  
-  26	  T('When the entities list is cached',
-    	  function (T)
-   6	    System.cache(entities)
-    	    
-  12	    T('When a system is invoked',
-    	    function (T)
-   5	      updatePosition(entities)
-  10	      T:assert(entities[1].position.x == 12 and entities[2].position.y == 42,
-   5	      'Then the components of the entities are updated')
-    	      
-  10	      T('When the other system is invoked',
-    	      function (T)
-   1	        updateBoundary(entities)
-   2	        T:assert(entities[2].velocity.y == -2,
-   1	        'Then the components of the entities are updated')
-    	      end)
-    	      
-  10	      T('When a system is invoked a second time',
-    	      function (T)
-   3	        updatePosition(entities)
-   6	        T:assert(entities[1].position.x == 14 and entities[2].position.y == 44,
-   3	        'Then the components of the entities are updated a second time')
-    	        
-   6	        T('When the cache is invalidated and a system is invoked a third time',
-    	        function (T)
-   1	          System.invalidate(entities)
-   1	          updatePosition(entities)
-   2	          T:assert(entities[1].position.x == 16 and entities[2].position.y == 46,
-   1	          'Then the components of the entities are updated a third time')
-    	        end)
-    	        
-   6	        T('When the cache is removed and a system is invoked a third time',
-    	        function (T)
-   1	          System.uncache(entities)
-   1	          updatePosition(entities)
-   2	          T:assert(entities[1].position.x == 16 and entities[2].position.y == 46,
-   1	          'Then the components of the entities are updated a third time')
-    	        end)
-    	        
-    	      end)
-    	      
-    	    end)
-    	    
-    	  end)
-    	  
-  26	  T('When System.each is invoked as an iterator',
-    	  function (T)
-   3	    for pos, vel in System.each(entities, posvel) do
-   2	      pos.x = pos.x + vel.x
-   2	      pos.y = pos.y + vel.y
     	    end
-   2	    T:assert(entities[1].position.x == 12 and entities[2].position.y == 42,
-   1	    'Then the components of the entities are updated')
-    	  end)
-    	  
-  26	  T('When System.each is invoked with a callback',
-    	  function (T)
-   2	    System.each(entities, posvel, System.forward, function (pos, vel)
-   2	      pos.x = pos.x + vel.x
-   2	      pos.y = pos.y + vel.y
-    	    end)
-   2	    T:assert(entities[1].position.x == 12 and entities[2].position.y == 42,
-   1	    'Then the components of the entities are updated')
-    	  end)
-    	  
-  26	  T('When getting an id for an entity',
-    	  function (T)
-   3	    local id1 = System.ids[entities[1]]
-   6	    T:assert(id1,
-   3	    'Then the id is returned')
-    	    
-   6	    T('When getting an id for the same entity',
+    	  )
+    	
+  10	  local addStuff = System(
+   5	    posvel,
+    	    function (pos, vel)
+   1	      return false, { e3 }
+    	    end
+    	  )
+    	
+  10	    local manualRemove = System(
+   5	      { 'position', '_index', '_entities' },
+    	      function (pos, i, e)
+   1	        if i == 1 then
+   1	            table.remove(e, i)
+    	        end
+    	      end
+    	    )
+    	
+    	
+   5	    local entities = { e1, e2 }
+    	
+  10	    T('When a system is invoked',
     	    function (T)
-   1	      local id2 = System.ids[entities[1]]
-   2	      T:assert(id1 == id2,
-   1	      'Then the same id is returned')
+   1	        updatePosition(entities)
+   2	        T:assert(entities[2].position.y == 42,
+   1	        'Then the components of the entities are updated')
     	    end)
-    	    
-   6	    T('When getting the entity from the id',
+    	
+  10	    T('When a process returns a truthy value',
     	    function (T)
-   1	      local e = System.entities[id1]
-   2	      T:assert(e == entities[1],
-   1	      'Then the same entity is returned')
+   1	        assert(#entities == 2)
+   1	        updatePosition(entities)
+   1	        updateBoundary(entities)
+   2	        T:assert(#entities == 1 and entities[1] == e1,
+   1	        'Then the current entity is removed')
     	    end)
-    	  
-    	  end)
-    	  
+    	
+  10	    T('When a process manually removes an entity',
+    	    function (T)
+   1	        assert(#entities == 2)
+   1	        manualRemove(entities)
+   2	        T:assert(#entities == 1 and entities[1] == e2,
+   1	        'Then the entity is removed')
+    	    end)
+    	
+  10	    T('When a process returns new entities',
+    	    function (T)
+   1	        assert(#entities == 2)
+   1	        addStuff(entities)
+   2	        T:assert(entities[3] == e3,
+   1	        'Then the new entities are added')
+    	    end)
+    	
     	end)
 
 ==============================================================================
@@ -998,13 +955,13 @@ Summary
 
 8	0	100.00%	./knife/base.lua
 36	0	100.00%	./knife/event.lua
-34	0	100.00%	./knife/memoize.lua
-64	0	100.00%	./knife/system.lua
+43	0	100.00%	./knife/memoize.lua
+50	0	100.00%	./knife/system.lua
 62	0	100.00%	./knife/test.lua
 39	0	100.00%	./spec/base.lua
 55	0	100.00%	./spec/event.lua
 111	0	100.00%	./spec/memoize.lua
-72	0	100.00%	./spec/system.lua
+47	0	100.00%	./spec/system.lua
 42	0	100.00%	./spec/test.lua
 ------------------------
-523	0	100.00%	
+493	0	100.00%	
