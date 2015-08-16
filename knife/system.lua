@@ -4,6 +4,9 @@ local tconcat = table.concat
 local type = type
 
 local underscoreByteValue = ('_'):byte()
+local runningTraversals = 0
+local removalList
+local insertionList
 
 local function hasInitialUnderscore (value)
     return type(value) == 'string' and value:byte() == underscoreByteValue
@@ -45,6 +48,10 @@ local function updateRemovalList (list, value, entityIndex)
         end
         return list
     end
+
+    runningTraversals = 0
+    removalList = nil
+    insertionList = nil
 
     error 'system returned an invalid value'
 end
@@ -88,10 +95,6 @@ local function createEntities (entities, insertionList)
         end
     end
 end
-
-local runningTraversals = 0
-local removalList
-local insertionList
 
 local function traverse (entities, aspects, process, invoke, ...)
 

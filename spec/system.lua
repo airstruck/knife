@@ -9,10 +9,6 @@ function (T)
         position = { x = 30, y = 40 },
         velocity = { x = 1, y = 2 }
     }
-    local e3 = {
-        position = { x = 1, y = 2 },
-        velocity = { x = 2, y = 1 }
-    }
 
     local updatePosition = System(
     { 'position', 'velocity' },
@@ -29,20 +25,6 @@ function (T)
         end
     end)
 
-    local addStuff = System(
-    { 'position', 'velocity' },
-    function (pos, vel)
-        return false, { e3 }
-    end)
-
-    local manualRemove = System(
-    { 'position', '_index', '_entities' },
-    function (pos, i, e)
-        if i == 1 then
-            table.remove(e, i)
-        end
-    end)
-
     local entities = { e1, e2 }
 
     T('When a system is invoked',
@@ -52,7 +34,33 @@ function (T)
         'Then the components of the entities are updated')
     end)
 
-    T('When a process returns a truthy value',
+    T('When a system with an empty aspects list is invoked',
+    function (T)
+        local counter = 0
+
+        local noAspects = System({}, function ()
+            counter = counter + 1
+        end)
+
+        noAspects(entities)
+        T:assert(counter == 2,
+        'Then all entities are processed')
+    end)
+
+    T('When a system references a pseudo-component',
+    function (T)
+        local results = {}
+        local pseudo = System(
+        { '_entity' },
+        function (entity)
+            results[#results + 1] = entity
+        end)
+        pseudo(entities)
+        T:assert(results[1] == e1 and results[2] == e2,
+        'Then the pseudo-component is available to the process')
+    end)
+
+    T('When a process returns true',
     function (T)
         assert(#entities == 2)
         updatePosition(entities)
@@ -61,8 +69,63 @@ function (T)
         'Then the current entity is removed')
     end)
 
+    T('When a process returns a number',
+    function (T)
+
+        local testRemovalByIndex = System(
+        { 'position' },
+        function (pos)
+            return 1
+        end)
+
+        assert(#entities == 2)
+        testRemovalByIndex(entities)
+        T:assert(#entities == 1 and entities[1] == e2,
+        'Then the corresponding entity is removed')
+    end)
+
+    T('When a process returns a table',
+    function (T)
+
+        local testRemovalByIndices = System(
+        { 'position' },
+        function (pos)
+            return { 1, 2 }
+        end)
+
+        assert(#entities == 2)
+        testRemovalByIndices(entities)
+        T:assert(#entities == 0,
+        'Then the corresponding entities are removed')
+    end)
+
+    T('When a process returns an invalid removal value',
+    function (T)
+
+        local testRemovalError = System(
+        { 'position' },
+        function (pos)
+            return 'x'
+        end)
+
+        T:error(function () testRemovalError(entities) end,
+        'Then an error is thrown')
+    end)
+
     T('When a process returns new entities',
     function (T)
+
+        local e3 = {
+            position = { x = 1, y = 2 },
+            velocity = { x = 2, y = 1 }
+        }
+
+        local addStuff = System(
+        { 'position', 'velocity' },
+        function (pos, vel)
+            return false, { e3 }
+        end)
+
         assert(#entities == 2)
         addStuff(entities)
         T:assert(entities[3] == e3,
