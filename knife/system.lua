@@ -3,29 +3,6 @@ local tremove = table.remove
 local tconcat = table.concat
 local type = type
 
-local function removeEntities (entities, indicesToRemove)
-    local indicesToRemoveIndex = #indicesToRemove
-
-    for entityIndex = #entities, 1, -1 do
-        if indicesToRemove[indicesToRemoveIndex] == entityIndex then
-            indicesToRemoveIndex = indicesToRemoveIndex - 1
-            tremove(entities, entityIndex)
-        end
-    end
-end
-
-local function createEntities (entities, newEntityGroups)
-    local entitiesIndex = #entities
-
-    for groupIndex = 1, #newEntityGroups do
-        local group = newEntityGroups[groupIndex]
-        for newEntityIndex = 1, #group do
-            entitiesIndex = entitiesIndex + 1
-            entities[entitiesIndex] = group[newEntityIndex]
-        end
-    end
-end
-
 local underscoreByteValue = ('_'):byte()
 
 local function hasInitialUnderscore (value)
@@ -42,51 +19,105 @@ local function checkAspects (entity, aspects)
     return true
 end
 
+local function updateRemovalList (list, value, entityIndex)
+    if not value then
+        return list
+    end
+    if not list then
+        list = {}
+    end
+
+    local valueType = type(value)
+
+    if valueType == 'boolean' then
+        list[entityIndex] = true
+        return list
+    end
+
+    if valueType == 'number' then
+        list[value] = true
+        return list
+    end
+
+    if valueType == 'table' then
+        for i = 1, #value do
+            list[value[i]] = true
+        end
+        return list
+    end
+
+    error 'system returned an invalid value'
+end
+
+local function updateInsertionList (list, value)
+    if not value then
+        return list
+    end
+    if not list then
+        list = {}
+    end
+
+    list[#list + 1] = value
+
+    return list
+end
+
+local function removeEntities (entities, removalList)
+    if not removalList then
+        return
+    end
+
+    for entityIndex = #entities, 1, -1 do
+        if removalList[entityIndex] then
+            tremove(entities, entityIndex)
+        end
+    end
+end
+
+local function createEntities (entities, insertionList)
+    if not insertionList then
+        return
+    end
+    local entitiesIndex = #entities
+
+    for groupIndex = 1, #insertionList do
+        local group = insertionList[groupIndex]
+        for newEntityIndex = 1, #group do
+            entitiesIndex = entitiesIndex + 1
+            entities[entitiesIndex] = group[newEntityIndex]
+        end
+    end
+end
+
+local runningTraversals = 0
+local removalList
+local insertionList
+
 local function traverse (entities, aspects, process, invoke, ...)
-    local indicesToRemove
-    local newEntityGroups
+
+    runningTraversals = runningTraversals + 1
 
     for index = 1, #entities do
         local entity = entities[index]
-
         if not entity then
             break
         end
-
         if checkAspects(entity, aspects) then
-
-            local shouldRemove, newEnts = invoke(
+            local removal, insertion = invoke(
                 process, entity, entities, index, ...)
 
-            if shouldRemove then
-                if not indicesToRemove then
-                    indicesToRemove = {}
-                end
-                indicesToRemove[#indicesToRemove + 1] = index
-            end
-
-            if newEnts then
-                if not newEntityGroups then
-                    newEntityGroups = {}
-                end
-                newEntityGroups[#newEntityGroups + 1] = newEnts
-            end
-
-            -- if entity at current index has changed, decrement index
-            if entity ~= entities[index] then
-                index = index - 1
-            end
-
+            removalList = updateRemovalList(removalList, removal, index)
+            insertionList = updateInsertionList(insertionList, insertion)
         end
-
     end
 
-    if indicesToRemove then
-        removeEntities(entities, indicesToRemove)
-    end
+    runningTraversals = runningTraversals - 1
 
-    if newEntityGroups then
-        createEntities(entities, newEntityGroups)
+    if runningTraversals == 0 then
+        removeEntities(entities, removalList)
+        createEntities(entities, insertionList)
+        removalList = nil
+        insertionList = nil
     end
 end
 
@@ -101,12 +132,19 @@ local function generateProcessInvoker (aspects)
             args[index] = ('_entity[%q]'):format(aspect)
         end
     end
+
+    local source
     local template = [[
         return function (_process, _entity, _entities, _index, ...)
-            return _process(%s, ...)
+            return _process(%s ...)
         end
     ]]
-    local source = (template):format(tconcat(args, ', '))
+
+    if args[1] then
+        source = (template):format(tconcat(args, ', ') .. ', ')
+    else
+        source = (template):format('')
+    end
 
     return loadstring(source)()
 end

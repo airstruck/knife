@@ -61,14 +61,6 @@ function (T)
         'Then the current entity is removed')
     end)
 
-    T('When a process manually removes an entity',
-    function (T)
-        assert(#entities == 2)
-        manualRemove(entities)
-        T:assert(#entities == 1 and entities[1] == e2,
-        'Then the entity is removed')
-    end)
-
     T('When a process returns new entities',
     function (T)
         assert(#entities == 2)

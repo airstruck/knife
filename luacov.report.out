@@ -191,22 +191,85 @@
    1	local tconcat = table.concat
    1	local type = type
     	
-    	local function removeEntities (entities, indicesToRemove)
-   1	    local indicesToRemoveIndex = #indicesToRemove
+   1	local underscoreByteValue = ('_'):byte()
+    	
+    	local function hasInitialUnderscore (value)
+  40	    return type(value) == 'string' and value:byte() == underscoreByteValue
+    	end
+    	
+    	local function checkAspects (entity, aspects)
+  20	    for index = 1, #aspects do
+  16	        local aspect = aspects[index]
+  16	        if entity[aspect] == nil and not hasInitialUnderscore(aspect) then
+   4	            return false
+    	        end
+    	    end
+   4	    return true
+    	end
+    	
+    	local function updateRemovalList (list, value, entityIndex)
+   4	    if not value then
+   3	        return list
+    	    end
+   1	    if not list then
+   1	        list = {}
+    	    end
+    	
+   1	    local valueType = type(value)
+    	
+   1	    if valueType == 'boolean' then
+   1	        list[entityIndex] = true
+   1	        return list
+    	    end
+    	
+***0	    if valueType == 'number' then
+***0	        list[value] = true
+***0	        return list
+    	    end
+    	
+***0	    if valueType == 'table' then
+***0	        for i = 1, #value do
+***0	            list[value[i]] = true
+    	        end
+***0	        return list
+    	    end
+    	
+***0	    error 'system returned an invalid value'
+    	end
+    	
+    	local function updateInsertionList (list, value)
+   4	    if not value then
+   3	        return list
+    	    end
+   1	    if not list then
+   1	        list = {}
+    	    end
+    	
+   1	    list[#list + 1] = value
+    	
+   1	    return list
+    	end
+    	
+    	local function removeEntities (entities, removalList)
+   4	    if not removalList then
+   3	        return
+    	    end
     	
    3	    for entityIndex = #entities, 1, -1 do
-   2	        if indicesToRemove[indicesToRemoveIndex] == entityIndex then
-   1	            indicesToRemoveIndex = indicesToRemoveIndex - 1
+   2	        if removalList[entityIndex] then
    1	            tremove(entities, entityIndex)
     	        end
     	    end
     	end
     	
-    	local function createEntities (entities, newEntityGroups)
+    	local function createEntities (entities, insertionList)
+   4	    if not insertionList then
+   3	        return
+    	    end
    1	    local entitiesIndex = #entities
     	
-   2	    for groupIndex = 1, #newEntityGroups do
-   1	        local group = newEntityGroups[groupIndex]
+   2	    for groupIndex = 1, #insertionList do
+   1	        local group = insertionList[groupIndex]
    2	        for newEntityIndex = 1, #group do
    1	            entitiesIndex = entitiesIndex + 1
    1	            entities[entitiesIndex] = group[newEntityIndex]
@@ -214,95 +277,70 @@
     	    end
     	end
     	
-   1	local underscoreByteValue = ('_'):byte()
-    	
-    	local function hasInitialUnderscore (value)
-  51	    return type(value) == 'string' and value:byte() == underscoreByteValue
-    	end
-    	
-    	local function checkAspects (entity, aspects)
-  24	    for index = 1, #aspects do
-  19	        local aspect = aspects[index]
-  19	        if entity[aspect] == nil and not hasInitialUnderscore(aspect) then
-   4	            return false
-    	        end
-    	    end
-   5	    return true
-    	end
+   1	local runningTraversals = 0
+    	local removalList
+    	local insertionList
     	
     	local function traverse (entities, aspects, process, invoke, ...)
-    	    local indicesToRemove
-    	    local newEntityGroups
     	
-  14	    for index = 1, #entities do
-  10	        local entity = entities[index]
+   4	    runningTraversals = runningTraversals + 1
     	
-  10	        if not entity then
-   1	            break
+  12	    for index = 1, #entities do
+   8	        local entity = entities[index]
+   8	        if not entity then
+    	            break
     	        end
+   8	        if checkAspects(entity, aspects) then
+   8	            local removal, insertion = invoke(
+   4	                process, entity, entities, index, ...)
     	
-   9	        if checkAspects(entity, aspects) then
-    	
-  10	            local shouldRemove, newEnts = invoke(
-   5	                process, entity, entities, index, ...)
-    	
-   5	            if shouldRemove then
-   1	                if not indicesToRemove then
-   1	                    indicesToRemove = {}
-    	                end
-   1	                indicesToRemove[#indicesToRemove + 1] = index
-    	            end
-    	
-   5	            if newEnts then
-   1	                if not newEntityGroups then
-   1	                    newEntityGroups = {}
-    	                end
-   1	                newEntityGroups[#newEntityGroups + 1] = newEnts
-    	            end
-    	
-    	            -- if entity at current index has changed, decrement index
-   5	            if entity ~= entities[index] then
-   1	                index = index - 1
-    	            end
-    	
+   4	            removalList = updateRemovalList(removalList, removal, index)
+   4	            insertionList = updateInsertionList(insertionList, insertion)
     	        end
-    	
     	    end
     	
-   5	    if indicesToRemove then
-   1	        removeEntities(entities, indicesToRemove)
-    	    end
+   4	    runningTraversals = runningTraversals - 1
     	
-   5	    if newEntityGroups then
-   1	        createEntities(entities, newEntityGroups)
+   4	    if runningTraversals == 0 then
+   4	        removeEntities(entities, removalList)
+   4	        createEntities(entities, insertionList)
+   4	        removalList = nil
+   4	        insertionList = nil
     	    end
     	end
     	
     	local function generateProcessInvoker (aspects)
-  20	    local args = {}
+  16	    local args = {}
     	
-  65	    for index = 1, #aspects do
-  45	        local aspect = aspects[index]
-  45	        if hasInitialUnderscore(aspect) then
-  10	            args[index] = aspect
+  52	    for index = 1, #aspects do
+  36	        local aspect = aspects[index]
+  36	        if hasInitialUnderscore(aspect) then
+   8	            args[index] = aspect
     	        else
-  35	            args[index] = ('_entity[%q]'):format(aspect)
+  28	            args[index] = ('_entity[%q]'):format(aspect)
     	        end
     	    end
+    	
+    	    local source
     	    local template = [[
     	        return function (_process, _entity, _entities, _index, ...)
-    	            return _process(%s, ...)
+    	            return _process(%s ...)
     	        end
-  20	    ]]
-  20	    local source = (template):format(tconcat(args, ', '))
+  16	    ]]
     	
-  20	    return loadstring(source)()
+  16	    if args[1] then
+  16	        source = (template):format(tconcat(args, ', ') .. ', ')
+    	    else
+***0	        source = (template):format('')
+    	    end
+    	
+  16	    return loadstring(source)()
     	end
     	
     	return function (aspects, process)
-  20	    local invoke = generateProcessInvoker(aspects)
+  16	    local invoke = generateProcessInvoker(aspects)
     	    return function (entities, ...)
-   5	        return traverse(entities, aspects, process, invoke, ...)
+   4	        return traverse(entities, aspects, process, invoke, ...)
     	    end
     	end
 
@@ -313,52 +351,52 @@
     	
     	-- Create a node representing a test section
     	local function createNode (parent, description, process)
- 108	    return setmetatable({
-  54	        parent = parent,
-  54	        description = description,
-  54	        process = process,
-  54	        nodes = {},
-  54	        activeNodeIndex = 1,
-  54	        currentNodeIndex = 0,
-  54	        assert = testAssert,
-  54	        error = testError,
- 108	    }, { __call = test })
+ 106	    return setmetatable({
+  53	        parent = parent,
+  53	        description = description,
+  53	        process = process,
+  53	        nodes = {},
+  53	        activeNodeIndex = 1,
+  53	        currentNodeIndex = 0,
+  53	        assert = testAssert,
+  53	        error = testError,
+ 106	    }, { __call = test })
     	end
     	
     	-- Run a node
     	local function runNode (node)
- 136	    node.currentNodeIndex = 0
- 136	    return node:process()
+ 134	    node.currentNodeIndex = 0
+ 134	    return node:process()
     	end
     	
     	-- Get the root node for a given node
     	local function getRootNode (node) 
- 126	    local parent = node.parent
- 126	    return parent and getRootNode(parent) or node
+ 125	    local parent = node.parent
+ 125	    return parent and getRootNode(parent) or node
     	end
     	
     	-- Update the active child node of the given node
     	local function updateActiveNode (node, description, process) 
-  82	    local activeNodeIndex = node.activeNodeIndex
-  82	    local nodes = node.nodes
-  82	    local activeNode = nodes[activeNodeIndex]
+  81	    local activeNodeIndex = node.activeNodeIndex
+  81	    local nodes = node.nodes
+  81	    local activeNode = nodes[activeNodeIndex]
     	
-  82	    if not activeNode then
-  47	        activeNode = createNode(node, description, process)
-  47	        nodes[activeNodeIndex] = activeNode
+  81	    if not activeNode then
+  46	        activeNode = createNode(node, description, process)
+  46	        nodes[activeNodeIndex] = activeNode
     	    else 
   35	        activeNode.process = process
     	    end
     	    
-  82	    getRootNode(node).lastActiveLeaf = activeNode
+  81	    getRootNode(node).lastActiveLeaf = activeNode
     	
-  82	    return activeNode
+  81	    return activeNode
     	end
     	
     	-- Run the active child node of the given node
     	local function runActiveNode (node, description, process) 
-  82	    local activeNode = updateActiveNode(node, description, process)
-  82	    return runNode(activeNode)
+  81	    local activeNode = updateActiveNode(node, description, process)
+  81	    return runNode(activeNode)
     	end
     	
     	-- Get ancestors of a node, including the node
@@ -392,18 +430,18 @@
     	
     	-- Create a branch node for a test scenario
     	test = function (node, description, process) 
- 352	    node.currentNodeIndex = node.currentNodeIndex + 1
- 352	    if node.currentNodeIndex == node.activeNodeIndex then
-  82	        return runActiveNode(node, description, process) 
+ 344	    node.currentNodeIndex = node.currentNodeIndex + 1
+ 344	    if node.currentNodeIndex == node.activeNodeIndex then
+  81	        return runActiveNode(node, description, process) 
     	    end
     	end
     	
     	-- Test an assertion
     	testAssert = function (self, value, description)
- 165	    if not value then
+ 164	    if not value then
    1	        return failAssert(self, description, 'Test failed: assertion failed')
     	    end
- 164	    return value
+ 163	    return value
     	end
     	
     	-- Expect function f to fail
@@ -418,10 +456,10 @@
    7	    local root = createNode(nil, description, process)
     	    
    7	    runNode(root)
-  54	    while root.activeNodeIndex <= #root.nodes do
-  47	        local lastActiveBranch = root.lastActiveLeaf.parent
-  47	        lastActiveBranch.activeNodeIndex = lastActiveBranch.activeNodeIndex + 1
-  47	        runNode(root)
+  53	    while root.activeNodeIndex <= #root.nodes do
+  46	        local lastActiveBranch = root.lastActiveLeaf.parent
+  46	        lastActiveBranch.activeNodeIndex = lastActiveBranch.activeNodeIndex + 1
+  46	        runNode(root)
     	    end
     	    
    7	    return root
@@ -794,59 +832,59 @@
 ==============================================================================
    2	T('Given some systems and some entities',
     	function (T)
-   5	    local System = require 'knife.system'
+   4	    local System = require 'knife.system'
     	
-   5	    local e1 = {
-   5	        position = { x = 10, y = 20 },
+   4	    local e1 = {
+   4	        position = { x = 10, y = 20 },
     	    }
-   5	    local e2 = {
-   5	        position = { x = 30, y = 40 },
-   5	        velocity = { x = 1, y = 2 }
+   4	    local e2 = {
+   4	        position = { x = 30, y = 40 },
+   4	        velocity = { x = 1, y = 2 }
     	    }
-   5	    local e3 = {
-   5	        position = { x = 1, y = 2 },
-   5	        velocity = { x = 2, y = 1 }
+   4	    local e3 = {
+   4	        position = { x = 1, y = 2 },
+   4	        velocity = { x = 2, y = 1 }
     	    }
     	
-  10	    local updatePosition = System(
-   5	    { 'position', 'velocity' },
+   8	    local updatePosition = System(
+   4	    { 'position', 'velocity' },
     	    function (pos, vel)
    2	        pos.x = pos.x + vel.x
    2	        pos.y = pos.y + vel.y
     	    end)
     	
-  10	    local updateBoundary = System(
-   5	    { 'position', 'velocity' },
+   8	    local updateBoundary = System(
+   4	    { 'position', 'velocity' },
     	    function (pos, vel)
    1	        if pos.y > 40 then
    1	            return true
     	        end
     	    end)
     	
-  10	    local addStuff = System(
-   5	    { 'position', 'velocity' },
+   8	    local addStuff = System(
+   4	    { 'position', 'velocity' },
     	    function (pos, vel)
    1	        return false, { e3 }
     	    end)
     	
-  10	    local manualRemove = System(
-   5	    { 'position', '_index', '_entities' },
+   8	    local manualRemove = System(
+   4	    { 'position', '_index', '_entities' },
     	    function (pos, i, e)
-   1	        if i == 1 then
-   1	            table.remove(e, i)
+***0	        if i == 1 then
+***0	            table.remove(e, i)
     	        end
     	    end)
     	
-   5	    local entities = { e1, e2 }
+   4	    local entities = { e1, e2 }
     	
-  10	    T('When a system is invoked',
+   8	    T('When a system is invoked',
     	    function (T)
    1	        updatePosition(entities)
    2	        T:assert(entities[2].position.y == 42,
    1	        'Then the components of the entities are updated')
     	    end)
     	
-  10	    T('When a process returns a truthy value',
+   8	    T('When a process returns a truthy value',
     	    function (T)
    1	        assert(#entities == 2)
    1	        updatePosition(entities)
@@ -855,15 +893,7 @@
    1	        'Then the current entity is removed')
     	    end)
     	
-  10	    T('When a process manually removes an entity',
-    	    function (T)
-   1	        assert(#entities == 2)
-   1	        manualRemove(entities)
-   2	        T:assert(#entities == 1 and entities[1] == e2,
-   1	        'Then the entity is removed')
-    	    end)
-    	
-  10	    T('When a process returns new entities',
+   8	    T('When a process returns new entities',
     	    function (T)
    1	        assert(#entities == 2)
    1	        addStuff(entities)
@@ -953,12 +983,12 @@ Summary
 8	0	100.00%	./knife/base.lua
 36	0	100.00%	./knife/event.lua
 43	0	100.00%	./knife/memoize.lua
-54	0	100.00%	./knife/system.lua
+66	9	88.00%	./knife/system.lua
 62	0	100.00%	./knife/test.lua
 39	0	100.00%	./spec/base.lua
 55	0	100.00%	./spec/event.lua
 111	0	100.00%	./spec/memoize.lua
-46	0	100.00%	./spec/system.lua
+39	2	95.12%	./spec/system.lua
 42	0	100.00%	./spec/test.lua
 ------------------------
-496	0	100.00%	
+501	11	97.85%	
