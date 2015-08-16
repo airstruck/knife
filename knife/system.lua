@@ -1,4 +1,7 @@
 local loadstring = _G.loadstring or _G.load
+local tremove = table.remove
+local tconcat = table.concat
+local type = type
 
 local function removeEntities (entities, indicesToRemove)
     local indicesToRemoveIndex = #indicesToRemove
@@ -6,7 +9,7 @@ local function removeEntities (entities, indicesToRemove)
     for entityIndex = #entities, 1, -1 do
         if indicesToRemove[indicesToRemoveIndex] == entityIndex then
             indicesToRemoveIndex = indicesToRemoveIndex - 1
-            table.remove(entities, entityIndex)
+            tremove(entities, entityIndex)
         end
     end
 end
@@ -103,7 +106,7 @@ local function generateProcessInvoker (aspects)
             return _process(%s, ...)
         end
     ]]
-    local source = (template):format(table.concat(args, ', '))
+    local source = (template):format(tconcat(args, ', '))
 
     return loadstring(source)()
 end

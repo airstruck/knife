@@ -1,7 +1,6 @@
-T('Given a system and some entities',
+T('Given some systems and some entities',
 function (T)
-  local System = require 'knife.system'
-
+    local System = require 'knife.system'
 
     local e1 = {
         position = { x = 10, y = 20 },
@@ -15,41 +14,34 @@ function (T)
         velocity = { x = 2, y = 1 }
     }
 
-  local posvel = { 'position', 'velocity' }
-
-  local updatePosition = System(
-    posvel,
+    local updatePosition = System(
+    { 'position', 'velocity' },
     function (pos, vel)
-      pos.x = pos.x + vel.x
-      pos.y = pos.y + vel.y
-    end
-  )
+        pos.x = pos.x + vel.x
+        pos.y = pos.y + vel.y
+    end)
 
-  local updateBoundary = System(
-    posvel,
+    local updateBoundary = System(
+    { 'position', 'velocity' },
     function (pos, vel)
-      if pos.y > 40 then
-        return true
-      end
-    end
-  )
+        if pos.y > 40 then
+            return true
+        end
+    end)
 
-  local addStuff = System(
-    posvel,
+    local addStuff = System(
+    { 'position', 'velocity' },
     function (pos, vel)
-      return false, { e3 }
-    end
-  )
+        return false, { e3 }
+    end)
 
     local manualRemove = System(
-      { 'position', '_index', '_entities' },
-      function (pos, i, e)
+    { 'position', '_index', '_entities' },
+    function (pos, i, e)
         if i == 1 then
             table.remove(e, i)
         end
-      end
-    )
-
+    end)
 
     local entities = { e1, e2 }
 

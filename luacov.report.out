@@ -105,7 +105,7 @@
 ==============================================================================
 ./knife/memoize.lua
 ==============================================================================
-   1	local unpack = table.unpack or _G.unpack
+   1	local loadstring = _G.loadstring or _G.load
    1	local weakKeys = { __mode = 'k' }
    1	local cache = setmetatable({}, weakKeys)
    1	local resultsKey = {}
@@ -186,13 +186,18 @@
 ==============================================================================
 ./knife/system.lua
 ==============================================================================
+   1	local loadstring = _G.loadstring or _G.load
+   1	local tremove = table.remove
+   1	local tconcat = table.concat
+   1	local type = type
+    	
     	local function removeEntities (entities, indicesToRemove)
    1	    local indicesToRemoveIndex = #indicesToRemove
     	
    3	    for entityIndex = #entities, 1, -1 do
    2	        if indicesToRemove[indicesToRemoveIndex] == entityIndex then
    1	            indicesToRemoveIndex = indicesToRemoveIndex - 1
-   1	            table.remove(entities, entityIndex)
+   1	            tremove(entities, entityIndex)
     	        end
     	    end
     	end
@@ -289,7 +294,7 @@
     	            return _process(%s, ...)
     	        end
   20	    ]]
-  20	    local source = (template):format(table.concat(args, ', '))
+  20	    local source = (template):format(tconcat(args, ', '))
     	
   20	    return loadstring(source)()
     	end
@@ -787,10 +792,9 @@
 ==============================================================================
 ./spec/system.lua
 ==============================================================================
-   2	T('Given a system and some entities',
+   2	T('Given some systems and some entities',
     	function (T)
-   5	  local System = require 'knife.system'
-    	
+   5	    local System = require 'knife.system'
     	
    5	    local e1 = {
    5	        position = { x = 10, y = 20 },
@@ -804,41 +808,34 @@
    5	        velocity = { x = 2, y = 1 }
     	    }
     	
-   5	  local posvel = { 'position', 'velocity' }
-    	
-  10	  local updatePosition = System(
-   5	    posvel,
+  10	    local updatePosition = System(
+   5	    { 'position', 'velocity' },
     	    function (pos, vel)
-   2	      pos.x = pos.x + vel.x
-   2	      pos.y = pos.y + vel.y
-    	    end
-    	  )
+   2	        pos.x = pos.x + vel.x
+   2	        pos.y = pos.y + vel.y
+    	    end)
     	
-  10	  local updateBoundary = System(
-   5	    posvel,
+  10	    local updateBoundary = System(
+   5	    { 'position', 'velocity' },
     	    function (pos, vel)
-   1	      if pos.y > 40 then
-   1	        return true
-    	      end
-    	    end
-    	  )
+   1	        if pos.y > 40 then
+   1	            return true
+    	        end
+    	    end)
     	
-  10	  local addStuff = System(
-   5	    posvel,
+  10	    local addStuff = System(
+   5	    { 'position', 'velocity' },
     	    function (pos, vel)
-   1	      return false, { e3 }
-    	    end
-    	  )
+   1	        return false, { e3 }
+    	    end)
     	
   10	    local manualRemove = System(
-   5	      { 'position', '_index', '_entities' },
-    	      function (pos, i, e)
+   5	    { 'position', '_index', '_entities' },
+    	    function (pos, i, e)
    1	        if i == 1 then
    1	            table.remove(e, i)
     	        end
-    	      end
-    	    )
-    	
+    	    end)
     	
    5	    local entities = { e1, e2 }
     	
@@ -956,12 +953,12 @@ Summary
 8	0	100.00%	./knife/base.lua
 36	0	100.00%	./knife/event.lua
 43	0	100.00%	./knife/memoize.lua
-50	0	100.00%	./knife/system.lua
+54	0	100.00%	./knife/system.lua
 62	0	100.00%	./knife/test.lua
 39	0	100.00%	./spec/base.lua
 55	0	100.00%	./spec/event.lua
 111	0	100.00%	./spec/memoize.lua
-47	0	100.00%	./spec/system.lua
+46	0	100.00%	./spec/system.lua
 42	0	100.00%	./spec/test.lua
 ------------------------
-493	0	100.00%	
+496	0	100.00%	
