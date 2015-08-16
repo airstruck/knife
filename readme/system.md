@@ -45,10 +45,17 @@ The API consists of a single function named `System`.
   parameters for optional arguments passed to the returned function following
   the entities list.
 
-  The `process` function may return up to two values. The first return value,
-  if truthy, will cause the entity being processed to be removed from the
-  entities list. The second return value, if present, should be a table
-  containing any new entities to append to the entities list.
+  The `process` function may return up to two values. The first return value
+  identifies entities to be removed from the list, and the second contains
+  new entities to append into the list.
+
+  If the first return value is `true`, the entity being processed will be
+  removed from the entities list. If it is a number, the entity at the
+  corresponding index will be removed. If it is a table of numbers, all entities
+  at the corresponding indices will be removed.
+
+  The second return value, if present, should be a table of entities to append
+  to the entities list.
 
 `System` returns a function representing your system. Call this function
 as needed (for example, in your update or draw routine). It requires an
