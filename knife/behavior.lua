@@ -30,6 +30,8 @@ local function performAction (behavior)
     end
 end
 
+-- external api
+
 local function update (behavior, dt)
     behavior.elapsed = behavior.elapsed + dt
 
@@ -41,8 +43,6 @@ local function update (behavior, dt)
 
     return behavior
 end
-
--- external api
 
 local function setState (behavior, state, index)
     behavior.state = state
@@ -62,12 +62,12 @@ return function (states, subject)
         elapsed = 0,
         state = 'default',
         index = 1,
-        -- internal/external api
+        -- internal api
         getCurrentFrame = getCurrentFrame,
         advanceFrame = advanceFrame,
         performAction = performAction,
-        update = update,
         -- external api
+        update = update,
         setState = setState
     }
 
