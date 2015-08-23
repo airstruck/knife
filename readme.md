@@ -4,6 +4,7 @@ A collection of useful micro-modules for Lua.
 
  * [knife.base](readme/base.md) - A base class for class-based OOP.
  * [knife.behavior](readme/behavior.md) - A state machine manager.
+ * [knife.chain](readme/chain.md) - Flatten async code with chained functions.
  * [knife.event](readme/event.md) - Dispatch and handle events.
  * [knife.memoize](readme/memoize.md) - A memoization function.
  * [knife.system](readme/system.md) - An entity component system.

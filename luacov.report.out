@@ -51,6 +51,8 @@
     	    end
     	end
     	
+    	-- external api
+    	
     	local function update (behavior, dt)
    3	    behavior.elapsed = behavior.elapsed + dt
     	
@@ -62,8 +64,6 @@
     	
    3	    return behavior
     	end
-    	
-    	-- external api
     	
     	local function setState (behavior, state, index)
    1	    behavior.state = state
@@ -83,12 +83,12 @@
    5	        elapsed = 0,
    5	        state = 'default',
    5	        index = 1,
-    	        -- internal/external api
+    	        -- internal api
    5	        getCurrentFrame = getCurrentFrame,
    5	        advanceFrame = advanceFrame,
    5	        performAction = performAction,
-   5	        update = update,
     	        -- external api
+   5	        update = update,
    5	        setState = setState
     	    }
     	
@@ -96,6 +96,37 @@
    5	    behavior:performAction()
     	
    5	    return behavior
+    	end
+
+==============================================================================
+./knife/chain.lua
+==============================================================================
+    	local function getNextLink (callbacks)
+    	
+    	    local function getCallbackInvoker (index)
+    	        return function (...)
+   3	            local callback = callbacks[index]
+   3	            if not callback then
+   1	                return
+    	            end
+   2	            callback(getCallbackInvoker(index + 1), ...)
+    	        end
+    	    end
+    	
+    	    local function nextLink (callback, ...)
+   3	        if not callback then
+   1	            return getCallbackInvoker(1)(...)
+    	        end
+   2	        callbacks[#callbacks + 1] = callback
+   2	        return nextLink
+    	    end
+    	
+   3	    return nextLink
+    	end
+    	
+    	return function (callback)
+   3	    local callbacks = { callback }
+   3	    return getNextLink(callbacks)
     	end
 
 ==============================================================================
@@ -436,52 +467,52 @@
     	
     	-- Create a node representing a test section
     	local function createNode (parent, description, process)
- 128	    return setmetatable({
-  64	        parent = parent,
-  64	        description = description,
-  64	        process = process,
-  64	        nodes = {},
-  64	        activeNodeIndex = 1,
-  64	        currentNodeIndex = 0,
-  64	        assert = testAssert,
-  64	        error = testError,
- 128	    }, { __call = test })
+ 136	    return setmetatable({
+  68	        parent = parent,
+  68	        description = description,
+  68	        process = process,
+  68	        nodes = {},
+  68	        activeNodeIndex = 1,
+  68	        currentNodeIndex = 0,
+  68	        assert = testAssert,
+  68	        error = testError,
+ 136	    }, { __call = test })
     	end
     	
     	-- Run a node
     	local function runNode (node)
- 159	    node.currentNodeIndex = 0
- 159	    return node:process()
+ 169	    node.currentNodeIndex = 0
+ 169	    return node:process()
     	end
     	
     	-- Get the root node for a given node
     	local function getRootNode (node) 
- 143	    local parent = node.parent
- 143	    return parent and getRootNode(parent) or node
+ 153	    local parent = node.parent
+ 153	    return parent and getRootNode(parent) or node
     	end
     	
     	-- Update the active child node of the given node
     	local function updateActiveNode (node, description, process) 
-  95	    local activeNodeIndex = node.activeNodeIndex
-  95	    local nodes = node.nodes
-  95	    local activeNode = nodes[activeNodeIndex]
+ 101	    local activeNodeIndex = node.activeNodeIndex
+ 101	    local nodes = node.nodes
+ 101	    local activeNode = nodes[activeNodeIndex]
     	
-  95	    if not activeNode then
-  56	        activeNode = createNode(node, description, process)
-  56	        nodes[activeNodeIndex] = activeNode
+ 101	    if not activeNode then
+  59	        activeNode = createNode(node, description, process)
+  59	        nodes[activeNodeIndex] = activeNode
     	    else 
-  39	        activeNode.process = process
+  42	        activeNode.process = process
     	    end
     	    
-  95	    getRootNode(node).lastActiveLeaf = activeNode
+ 101	    getRootNode(node).lastActiveLeaf = activeNode
     	
-  95	    return activeNode
+ 101	    return activeNode
     	end
     	
     	-- Run the active child node of the given node
     	local function runActiveNode (node, description, process) 
-  95	    local activeNode = updateActiveNode(node, description, process)
-  95	    return runNode(activeNode)
+ 101	    local activeNode = updateActiveNode(node, description, process)
+ 101	    return runNode(activeNode)
     	end
     	
     	-- Get ancestors of a node, including the node
@@ -515,18 +546,18 @@
     	
     	-- Create a branch node for a test scenario
     	test = function (node, description, process) 
- 430	    node.currentNodeIndex = node.currentNodeIndex + 1
- 430	    if node.currentNodeIndex == node.activeNodeIndex then
-  95	        return runActiveNode(node, description, process) 
+ 439	    node.currentNodeIndex = node.currentNodeIndex + 1
+ 439	    if node.currentNodeIndex == node.activeNodeIndex then
+ 101	        return runActiveNode(node, description, process) 
     	    end
     	end
     	
     	-- Test an assertion
     	testAssert = function (self, value, description)
- 177	    if not value then
+ 183	    if not value then
    1	        return failAssert(self, description, 'Test failed: assertion failed')
     	    end
- 176	    return value
+ 182	    return value
     	end
     	
     	-- Expect function f to fail
@@ -538,23 +569,23 @@
     	
     	-- Create the root node for a test scenario
     	local function T (description, process)
-   8	    local root = createNode(nil, description, process)
+   9	    local root = createNode(nil, description, process)
     	    
-   8	    runNode(root)
-  64	    while root.activeNodeIndex <= #root.nodes do
-  56	        local lastActiveBranch = root.lastActiveLeaf.parent
-  56	        lastActiveBranch.activeNodeIndex = lastActiveBranch.activeNodeIndex + 1
-  56	        runNode(root)
+   9	    runNode(root)
+  68	    while root.activeNodeIndex <= #root.nodes do
+  59	        local lastActiveBranch = root.lastActiveLeaf.parent
+  59	        lastActiveBranch.activeNodeIndex = lastActiveBranch.activeNodeIndex + 1
+  59	        runNode(root)
     	    end
     	    
-   8	    return root
+   9	    return root
     	end
     	
     	-- Run any other files passed from CLI.
    1	if arg and arg[0]:gmatch('test.lua') then
    1	    _G.T = T
-   7	    for i = 1, #arg do
-   6	        dofile(arg[i])
+   8	    for i = 1, #arg do
+   7	        dofile(arg[i])
     	    end
    1	    _G.T = nil
     	end
@@ -691,6 +722,54 @@
    1	            behavior:setState('walk', 2)
    2	            T:assert(behavior.frame == states.walk[2],
    1	            'Then the frame is set accordingly')
+    	        end)
+    	
+    	    end)
+    	
+    	end)
+
+==============================================================================
+./spec/chain.lua
+==============================================================================
+   2	T('Given a function taking a callback', function (T)
+    	
+   4	    local Chain = require 'knife.chain'
+    	
+    	    local function doStuff (a, b, callback)
+   1	        callback(a, b)
+    	    end
+    	
+   8	    T('When Chain factory is called', function (T)
+    	
+   6	        local c1 = Chain(function (go)
+   1	            doStuff(2, 3, go)
+    	        end)
+    	
+   6	        T:assert(type(c1) == 'function',
+   3	        'Then a chain is created')
+    	
+   6	        T('When the chain is invoked with a function arg', function (T)
+    	
+    	            local resultA, resultB
+    	
+   4	            local c2 = c1(function (go, a, b)
+   1	                resultA = a
+   1	                resultB = b
+   1	                go()
+    	            end)
+    	
+   4	            T:assert(type(c2) == 'function' and c1 == c2,
+   2	            'Then the chain is extended')
+    	
+   4	            T('When the chain is invoked with no args', function (T)
+    	
+   1	                c2()
+    	
+   2	                T:assert(resultA == 2 and resultB == 3,
+   1	                'Then the chain is executed')
+    	
+    	            end)
+    	
     	        end)
     	
     	    end)
@@ -1197,15 +1276,17 @@ Summary
 
 8	0	100.00%	./knife/base.lua
 40	0	100.00%	./knife/behavior.lua
+11	0	100.00%	./knife/chain.lua
 36	0	100.00%	./knife/event.lua
 43	0	100.00%	./knife/memoize.lua
 78	0	100.00%	./knife/system.lua
 62	0	100.00%	./knife/test.lua
 39	0	100.00%	./spec/base.lua
 43	0	100.00%	./spec/behavior.lua
+19	0	100.00%	./spec/chain.lua
 55	0	100.00%	./spec/event.lua
 111	0	100.00%	./spec/memoize.lua
 74	0	100.00%	./spec/system.lua
 42	0	100.00%	./spec/test.lua
 ------------------------
-631	0	100.00%	
+661	0	100.00%	
