@@ -4,4 +4,4 @@ echo "
 === Running tests ===
 "
 lua5.1 -lluacov ./knife/test.lua ./spec/*; luacov; rm luacov.stats.out
-tail luacov.report.out
+tail -n 20 luacov.report.out

@@ -17,6 +17,88 @@
     	
 
 ==============================================================================
+./knife/behavior.lua
+==============================================================================
+    	-- behavior.lua -- a state manager
+    	
+    	-- internal/external api
+    	
+    	local function getCurrentFrame (behavior)
+  18	    return behavior.states[behavior.state][behavior.index]
+    	end
+    	
+    	local function advanceFrame (behavior)
+  12	    local nextState = behavior.frame.after
+  12	    local nextIndex = behavior.index + 1
+  12	    local maxIndex = #behavior.states[behavior.state]
+    	
+  12	    if nextState then
+   2	        behavior.state = nextState
+   2	        nextIndex = 1
+  10	    elseif nextIndex > maxIndex then
+   2	        nextIndex = 1
+    	    end
+    	
+  12	    behavior.index = nextIndex
+  12	    behavior.frame = behavior:getCurrentFrame()
+    	end
+    	
+    	local function performAction (behavior)
+  18	    local act = behavior.frame.action
+    	
+  18	    if act then
+   2	        act(behavior, behavior.subject)
+    	    end
+    	end
+    	
+    	local function update (behavior, dt)
+   3	    behavior.elapsed = behavior.elapsed + dt
+    	
+  15	    while behavior.elapsed >= behavior.frame.duration do
+  12	        behavior.elapsed = behavior.elapsed - behavior.frame.duration
+  12	        behavior:advanceFrame()
+  12	        behavior:performAction()
+    	    end
+    	
+   3	    return behavior
+    	end
+    	
+    	-- external api
+    	
+    	local function setState (behavior, state, index)
+   1	    behavior.state = state
+   1	    behavior.index = index or 1
+   1	    behavior.elapsed = 0
+   1	    behavior.frame = behavior:getCurrentFrame()
+   1	    behavior:performAction()
+   1	    return behavior
+    	end
+    	
+    	-- behavior factory
+    	
+    	return function (states, subject)
+   5	    local behavior = {
+   5	        states = states,
+   5	        subject = subject,
+   5	        elapsed = 0,
+   5	        state = 'default',
+   5	        index = 1,
+    	        -- internal/external api
+   5	        getCurrentFrame = getCurrentFrame,
+   5	        advanceFrame = advanceFrame,
+   5	        performAction = performAction,
+   5	        update = update,
+    	        -- external api
+   5	        setState = setState
+    	    }
+    	
+   5	    behavior.frame = behavior:getCurrentFrame()
+   5	    behavior:performAction()
+    	
+   5	    return behavior
+    	end
+
+==============================================================================
 ./knife/event.lua
 ==============================================================================
     	-- Event module
@@ -354,52 +436,52 @@
     	
     	-- Create a node representing a test section
     	local function createNode (parent, description, process)
- 116	    return setmetatable({
-  58	        parent = parent,
-  58	        description = description,
-  58	        process = process,
-  58	        nodes = {},
-  58	        activeNodeIndex = 1,
-  58	        currentNodeIndex = 0,
-  58	        assert = testAssert,
-  58	        error = testError,
- 116	    }, { __call = test })
+ 128	    return setmetatable({
+  64	        parent = parent,
+  64	        description = description,
+  64	        process = process,
+  64	        nodes = {},
+  64	        activeNodeIndex = 1,
+  64	        currentNodeIndex = 0,
+  64	        assert = testAssert,
+  64	        error = testError,
+ 128	    }, { __call = test })
     	end
     	
     	-- Run a node
     	local function runNode (node)
- 144	    node.currentNodeIndex = 0
- 144	    return node:process()
+ 159	    node.currentNodeIndex = 0
+ 159	    return node:process()
     	end
     	
     	-- Get the root node for a given node
     	local function getRootNode (node) 
- 130	    local parent = node.parent
- 130	    return parent and getRootNode(parent) or node
+ 143	    local parent = node.parent
+ 143	    return parent and getRootNode(parent) or node
     	end
     	
     	-- Update the active child node of the given node
     	local function updateActiveNode (node, description, process) 
-  86	    local activeNodeIndex = node.activeNodeIndex
-  86	    local nodes = node.nodes
-  86	    local activeNode = nodes[activeNodeIndex]
+  95	    local activeNodeIndex = node.activeNodeIndex
+  95	    local nodes = node.nodes
+  95	    local activeNode = nodes[activeNodeIndex]
     	
-  86	    if not activeNode then
-  51	        activeNode = createNode(node, description, process)
-  51	        nodes[activeNodeIndex] = activeNode
+  95	    if not activeNode then
+  56	        activeNode = createNode(node, description, process)
+  56	        nodes[activeNodeIndex] = activeNode
     	    else 
-  35	        activeNode.process = process
+  39	        activeNode.process = process
     	    end
     	    
-  86	    getRootNode(node).lastActiveLeaf = activeNode
+  95	    getRootNode(node).lastActiveLeaf = activeNode
     	
-  86	    return activeNode
+  95	    return activeNode
     	end
     	
     	-- Run the active child node of the given node
     	local function runActiveNode (node, description, process) 
-  86	    local activeNode = updateActiveNode(node, description, process)
-  86	    return runNode(activeNode)
+  95	    local activeNode = updateActiveNode(node, description, process)
+  95	    return runNode(activeNode)
     	end
     	
     	-- Get ancestors of a node, including the node
@@ -433,18 +515,18 @@
     	
     	-- Create a branch node for a test scenario
     	test = function (node, description, process) 
- 404	    node.currentNodeIndex = node.currentNodeIndex + 1
- 404	    if node.currentNodeIndex == node.activeNodeIndex then
-  86	        return runActiveNode(node, description, process) 
+ 430	    node.currentNodeIndex = node.currentNodeIndex + 1
+ 430	    if node.currentNodeIndex == node.activeNodeIndex then
+  95	        return runActiveNode(node, description, process) 
     	    end
     	end
     	
     	-- Test an assertion
     	testAssert = function (self, value, description)
- 168	    if not value then
+ 177	    if not value then
    1	        return failAssert(self, description, 'Test failed: assertion failed')
     	    end
- 167	    return value
+ 176	    return value
     	end
     	
     	-- Expect function f to fail
@@ -456,23 +538,23 @@
     	
     	-- Create the root node for a test scenario
     	local function T (description, process)
-   7	    local root = createNode(nil, description, process)
+   8	    local root = createNode(nil, description, process)
     	    
-   7	    runNode(root)
-  58	    while root.activeNodeIndex <= #root.nodes do
-  51	        local lastActiveBranch = root.lastActiveLeaf.parent
-  51	        lastActiveBranch.activeNodeIndex = lastActiveBranch.activeNodeIndex + 1
-  51	        runNode(root)
+   8	    runNode(root)
+  64	    while root.activeNodeIndex <= #root.nodes do
+  56	        local lastActiveBranch = root.lastActiveLeaf.parent
+  56	        lastActiveBranch.activeNodeIndex = lastActiveBranch.activeNodeIndex + 1
+  56	        runNode(root)
     	    end
     	    
-   7	    return root
+   8	    return root
     	end
     	
     	-- Run any other files passed from CLI.
    1	if arg and arg[0]:gmatch('test.lua') then
    1	    _G.T = T
-   6	    for i = 1, #arg do
-   5	        dofile(arg[i])
+   7	    for i = 1, #arg do
+   6	        dofile(arg[i])
     	    end
    1	    _G.T = nil
     	end
@@ -547,6 +629,73 @@
     	  end)
     	end)
     	
+
+==============================================================================
+./spec/behavior.lua
+==============================================================================
+   2	T('Given some states', function (T)
+    	
+   6	    local Behavior = require 'knife.behavior'
+    	
+   6	    local thought = false
+    	
+    	    local function think (behavior, subject)
+   2	        thought = true
+    	    end
+    	
+   6	    local states = {
+   6	        default = {
+   6	            { sprite = 'human.idle.a', duration = 1, after = 'idle' },
+   6	        },
+   6	        idle = {
+   6	            { sprite = 'human.idle.a', duration = 3 },
+   6	            { sprite = 'human.idle.b', duration = 1 },
+   6	            { sprite = 'human.idle.a', duration = 2 },
+   6	            { sprite = 'human.idle.c', duration = 1, action = think },
+   6	        },
+   6	        walk = {
+   6	            { sprite = 'human.run.a', duration = 0.2 },
+   6	            { sprite = 'human.run.b', duration = 0.2 },
+   6	            { sprite = 'human.run.c', duration = 0.2 },
+   6	            { sprite = 'human.run.b', duration = 0.2 },
+   6	        },
+    	    }
+    	
+  12	    T('When a behavior is created', function (T)
+   5	        local subject = {}
+   5	        local behavior = Behavior(states, subject)
+   5	        local frame = behavior.frame
+  10	        T:assert(frame,
+   5	        'Then the behavior has a current frame')
+    	
+  10	        T('When the behavior is updated by a small dt', function (T)
+   1	            behavior:update(0.5)
+   2	            T:assert(behavior.frame == frame,
+   1	            'Then the behavior has the same frame')
+    	        end)
+    	
+  10	        T('When the behavior is updated by a larger dt', function (T)
+   1	            behavior:update(2)
+   2	            T:assert(behavior.frame ~= frame,
+   1	            'Then the behavior has a new frame')
+    	        end)
+    	
+  10	        T('When the behavior encounters an action', function (T)
+   1	            assert(thought == false)
+   1	            behavior:update(20)
+   2	            T:assert(thought == true,
+   1	            'Then the action executes')
+    	        end)
+    	
+  10	        T('When the behavior is set to a state', function (T)
+   1	            behavior:setState('walk', 2)
+   2	            T:assert(behavior.frame == states.walk[2],
+   1	            'Then the frame is set accordingly')
+    	        end)
+    	
+    	    end)
+    	
+    	end)
 
 ==============================================================================
 ./spec/event.lua
@@ -1047,14 +1196,16 @@ Summary
 ==============================================================================
 
 8	0	100.00%	./knife/base.lua
+40	0	100.00%	./knife/behavior.lua
 36	0	100.00%	./knife/event.lua
 43	0	100.00%	./knife/memoize.lua
 78	0	100.00%	./knife/system.lua
 62	0	100.00%	./knife/test.lua
 39	0	100.00%	./spec/base.lua
+43	0	100.00%	./spec/behavior.lua
 55	0	100.00%	./spec/event.lua
 111	0	100.00%	./spec/memoize.lua
 74	0	100.00%	./spec/system.lua
 42	0	100.00%	./spec/test.lua
 ------------------------
-548	0	100.00%	
+631	0	100.00%	
