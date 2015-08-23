@@ -8,7 +8,7 @@ Require the library.
 
     local Behavior = require 'knife.behavior'
 
-Define a table containing states. A "default" state is required.
+Define a table containing states.
 
     local states = {
         default = {
@@ -28,36 +28,42 @@ Define a table containing states. A "default" state is required.
         },
     }
 
-The items in each state are called "frames." Each frame may contain the
-following keys:
-
-- **action**: a function to execute at the beginning of the frame. It takes the
-  behavior as its first argument and an optional "subject" as the second.
-
-- **after**: the name of a state to enter after the current frame.
-
-- **duration**: number of seconds to wait before advancing to the next frame.
-
-- any arbitrary user-defined keys ("sprite" in this example).
-
-Create a behavior object:
+Create a behavior object.
 
     local behavior = Behavior(states)
 
-Update the behavior object with the time delta:
+Update the behavior object with the time delta.
 
     function love.update (dt)
         behavior:update(dt)
     end
 
+## States
+
+State tables may contain any number of *states*. The **default** state is
+always required; newly created behaviors begin in this state.
+
+The items in each state are called *frames*. Each frame may contain the
+following special keys:
+
+- **action**: a function to execute at the beginning of the frame. It takes the
+behavior as its first argument and an optional "subject" as the second.
+
+- **after**: the name of a state to enter after the current frame.
+
+- **duration**: number of seconds to wait before advancing to the next frame.
+
+Frames may also contain arbitrary user-defined keys, for example "sprite" in
+the example above.
+
 ## API
 
-### Behavior (states [, subject]) -> behavior
+#### Behavior (states [, subject]) -> behavior
 
-Creates a new behavior object. An optional `subject` is passed as a second
-argument to any *action* functions.
+Creates a new behavior object given a `states` table and an optional `subject`
+(passed as a second argument to any *action* functions).
 
-### behavior:update (dt)
+#### behavior:update (dt)
 
 Update the behavior object with a time delta. When the elapsed time exceeds
 the current frame *duration*, the behavior will advance to the next frame.
@@ -69,20 +75,20 @@ Otherwise, the behavior will advance to the next frame in the current state.
 If there is no next frame in the current state, the behavior will loop back
 to the first frame in the current state.
 
-### behavior:setState (state [, index])
+#### behavior:setState (state [, index])
 
 Set the current frame to the named `state` at the given `index`, or to the
 first frame in the named `state` if `index` is omitted.
 
-### behavior.state
+#### behavior.state
 
 The name of the current state.
 
-### behavior.index
+#### behavior.index
 
 The index of the current frame within the current state.
 
-### behavior.frame
+#### behavior.frame
 
 The current frame. May be used to access user-defined keys.
 
