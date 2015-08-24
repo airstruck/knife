@@ -57,14 +57,14 @@ as `Chain` itself, with two additional behaviors:
 
 - References to any link in the chain are identical. For example:
 
-      local c1 = Chain(function (continue)
-          print 'link one'
-          continue()
-      end)
+        local c1 = Chain(function (continue)
+            print 'link one'
+            continue()
+        end)
 
-      local c2 = c1(function (continue)
-          print 'link two'
-          continue()
-      end)
+        local c2 = c1(function (continue)
+            print 'link two'
+            continue()
+        end)
 
-      assert(c1 == c2) -- passes
+        assert(c1 == c2) -- passes
