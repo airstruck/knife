@@ -130,6 +130,64 @@
     	end
 
 ==============================================================================
+./knife/convoke.lua
+==============================================================================
+    	return function (routine)
+   4	    local routines = { routine }
+   4	    local routineIndex = 1
+   4	    local isFinished = false
+    	
+    	    local function execute ()
+   5	        local continueCount = 0
+    	        local run
+    	
+    	        local function continue ()
+   8	            continueCount = continueCount + 1
+    	            return function (...)
+   8	                continueCount = continueCount - 1
+   8	                if continueCount == 0 then
+   7	                    return run(...)
+    	                end
+    	            end
+    	        end
+    	
+    	        local function wait (...)
+   7	            return coroutine.yield(...)
+    	        end
+    	
+  10	        local r = coroutine.create(function ()
+   5	            isFinished = false
+  11	            while routineIndex <= #routines do
+   6	                routines[routineIndex](continue, wait)
+   6	                continueCount = 0
+   6	                routineIndex = routineIndex + 1
+    	            end
+   5	            isFinished = true
+    	        end)
+    	
+    	        run = function (...)
+  12	            return coroutine.resume(r, ...)
+    	        end
+    	
+   5	        run()
+    	    end
+    	
+    	    local function appendOrExecute (routine)
+   6	        if routine then
+   2	            routines[#routines + 1] = routine
+   2	            if isFinished then
+   1	                execute()
+    	            end
+   2	            return appendOrExecute
+    	        else
+   4	            execute()
+    	        end
+    	    end
+    	
+   4	    return appendOrExecute
+    	end
+
+==============================================================================
 ./knife/event.lua
 ==============================================================================
     	-- Event module
@@ -467,52 +525,52 @@
     	
     	-- Create a node representing a test section
     	local function createNode (parent, description, process)
- 136	    return setmetatable({
-  68	        parent = parent,
-  68	        description = description,
-  68	        process = process,
-  68	        nodes = {},
-  68	        activeNodeIndex = 1,
-  68	        currentNodeIndex = 0,
-  68	        assert = testAssert,
-  68	        error = testError,
- 136	    }, { __call = test })
+ 146	    return setmetatable({
+  73	        parent = parent,
+  73	        description = description,
+  73	        process = process,
+  73	        nodes = {},
+  73	        activeNodeIndex = 1,
+  73	        currentNodeIndex = 0,
+  73	        assert = testAssert,
+  73	        error = testError,
+ 146	    }, { __call = test })
     	end
     	
     	-- Run a node
     	local function runNode (node)
- 169	    node.currentNodeIndex = 0
- 169	    return node:process()
+ 178	    node.currentNodeIndex = 0
+ 178	    return node:process()
     	end
     	
     	-- Get the root node for a given node
     	local function getRootNode (node) 
- 153	    local parent = node.parent
- 153	    return parent and getRootNode(parent) or node
+ 157	    local parent = node.parent
+ 157	    return parent and getRootNode(parent) or node
     	end
     	
     	-- Update the active child node of the given node
     	local function updateActiveNode (node, description, process) 
- 101	    local activeNodeIndex = node.activeNodeIndex
- 101	    local nodes = node.nodes
- 101	    local activeNode = nodes[activeNodeIndex]
+ 105	    local activeNodeIndex = node.activeNodeIndex
+ 105	    local nodes = node.nodes
+ 105	    local activeNode = nodes[activeNodeIndex]
     	
- 101	    if not activeNode then
-  59	        activeNode = createNode(node, description, process)
-  59	        nodes[activeNodeIndex] = activeNode
+ 105	    if not activeNode then
+  63	        activeNode = createNode(node, description, process)
+  63	        nodes[activeNodeIndex] = activeNode
     	    else 
   42	        activeNode.process = process
     	    end
     	    
- 101	    getRootNode(node).lastActiveLeaf = activeNode
+ 105	    getRootNode(node).lastActiveLeaf = activeNode
     	
- 101	    return activeNode
+ 105	    return activeNode
     	end
     	
     	-- Run the active child node of the given node
     	local function runActiveNode (node, description, process) 
- 101	    local activeNode = updateActiveNode(node, description, process)
- 101	    return runNode(activeNode)
+ 105	    local activeNode = updateActiveNode(node, description, process)
+ 105	    return runNode(activeNode)
     	end
     	
     	-- Get ancestors of a node, including the node
@@ -546,18 +604,18 @@
     	
     	-- Create a branch node for a test scenario
     	test = function (node, description, process) 
- 439	    node.currentNodeIndex = node.currentNodeIndex + 1
- 439	    if node.currentNodeIndex == node.activeNodeIndex then
- 101	        return runActiveNode(node, description, process) 
+ 459	    node.currentNodeIndex = node.currentNodeIndex + 1
+ 459	    if node.currentNodeIndex == node.activeNodeIndex then
+ 105	        return runActiveNode(node, description, process) 
     	    end
     	end
     	
     	-- Test an assertion
     	testAssert = function (self, value, description)
- 183	    if not value then
+ 192	    if not value then
    1	        return failAssert(self, description, 'Test failed: assertion failed')
     	    end
- 182	    return value
+ 191	    return value
     	end
     	
     	-- Expect function f to fail
@@ -569,23 +627,23 @@
     	
     	-- Create the root node for a test scenario
     	local function T (description, process)
-   9	    local root = createNode(nil, description, process)
+  10	    local root = createNode(nil, description, process)
     	    
-   9	    runNode(root)
-  68	    while root.activeNodeIndex <= #root.nodes do
-  59	        local lastActiveBranch = root.lastActiveLeaf.parent
-  59	        lastActiveBranch.activeNodeIndex = lastActiveBranch.activeNodeIndex + 1
-  59	        runNode(root)
+  10	    runNode(root)
+  73	    while root.activeNodeIndex <= #root.nodes do
+  63	        local lastActiveBranch = root.lastActiveLeaf.parent
+  63	        lastActiveBranch.activeNodeIndex = lastActiveBranch.activeNodeIndex + 1
+  63	        runNode(root)
     	    end
     	    
-   9	    return root
+  10	    return root
     	end
     	
     	-- Run any other files passed from CLI.
    1	if arg and arg[0]:gmatch('test.lua') then
    1	    _G.T = T
-   8	    for i = 1, #arg do
-   7	        dofile(arg[i])
+   9	    for i = 1, #arg do
+   8	        dofile(arg[i])
     	    end
    1	    _G.T = nil
     	end
@@ -772,6 +830,102 @@
     	
     	        end)
     	
+    	    end)
+    	
+    	end)
+
+==============================================================================
+./spec/convoke.lua
+==============================================================================
+   2	T('Given convoke', function (T)
+   5	    local Convoke = require 'knife.convoke'
+    	
+   5	    local cb = {}
+    	
+    	    local function go ()
+  13	        for k, v in ipairs(cb) do
+   8	            v()
+    	        end
+   5	        cb = {}
+    	    end
+    	
+    	    local function doStuff (arg1, arg2, callback)
+   8	        cb[#cb + 1] = function ()
+   8	            callback(arg1, arg2)
+    	        end
+    	    end
+    	
+  10	    T('When invoked with a callback', function (T)
+   2	        Convoke(function (continue, wait)
+   1	            doStuff(123, 456, continue())
+   1	            local r1, r2 = wait()
+   2	            T:assert(r1 == 123 and r2 == 456,
+   1	            'Then "wait" returns arguments passed to contination function')
+    	
+   1	            doStuff(234, 345, continue())
+   1	            local r1, r2 = wait()
+   2	            T:assert(r1 == 234 and r2 == 345,
+   1	            'Then "wait" returns arguments passed to contination function x2')
+   3	        end)()
+    	
+   1	        go()
+    	    end)
+    	
+  10	    T('When multiple continues are present', function (T)
+   2	        Convoke(function (continue, wait)
+   1	            doStuff(123, 456, continue())
+   1	            doStuff(234, 345, continue())
+   1	            local r1, r2 = wait()
+   2	            T:assert(r1 == 234 and r2 == 345,
+   1	            'Then "wait" returns arguments from last invoked contination')
+   3	        end)()
+    	
+   1	        go()
+    	    end)
+    	
+  10	    T('When invoked with multiple callbacks', function (T)
+   2	        Convoke(function (continue, wait)
+   1	            doStuff(123, 456, continue())
+   1	            local r1, r2 = wait()
+   2	            T:assert(r1 == 123 and r2 == 456,
+   1	            'Then "wait" returns arguments passed to contination function')
+   3	        end)(function (continue, wait)
+   1	            doStuff(234, 345, continue())
+   1	            local r1, r2 = wait()
+   2	            T:assert(r1 == 234 and r2 == 345,
+   1	            'Then "wait" returns arguments passed to contination function x2')
+   3	        end)()
+    	
+   1	        go()
+    	    end)
+    	
+  10	    T('When invoked with a callback after running', function (T)
+    	        local foo
+    	
+   2	        local c = Convoke(function (continue, wait)
+   1	            doStuff(123, 456, continue())
+   1	            local r1, r2 = wait()
+   2	            T:assert(r1 == 123 and r2 == 456,
+   1	            'Then "wait" returns arguments passed to contination function')
+   1	            foo = 1
+    	        end)
+    	
+   1	        c()
+   1	        go()
+    	
+   1	        T:assert(foo == 1, 'Then the first callback runs')
+    	
+   2	        c(function (continue, wait)
+   1	            doStuff(234, 345, continue())
+   1	            local r1, r2 = wait()
+   2	            T:assert(r1 == 234 and r2 == 345,
+   1	            'Then "wait" returns arguments passed to contination function x2')
+   1	            foo = 2
+    	        end)
+    	
+   1	        go()
+    	
+   1	        T:assert(foo == 2, 'Then the second callback runs')
     	    end)
     	
     	end)
@@ -1277,6 +1431,7 @@ Summary
 8	0	100.00%	./knife/base.lua
 40	0	100.00%	./knife/behavior.lua
 11	0	100.00%	./knife/chain.lua
+25	0	100.00%	./knife/convoke.lua
 36	0	100.00%	./knife/event.lua
 43	0	100.00%	./knife/memoize.lua
 78	0	100.00%	./knife/system.lua
@@ -1284,9 +1439,10 @@ Summary
 39	0	100.00%	./spec/base.lua
 43	0	100.00%	./spec/behavior.lua
 19	0	100.00%	./spec/chain.lua
+60	0	100.00%	./spec/convoke.lua
 55	0	100.00%	./spec/event.lua
 111	0	100.00%	./spec/memoize.lua
 74	0	100.00%	./spec/system.lua
 42	0	100.00%	./spec/test.lua
 ------------------------
-661	0	100.00%	
+746	0	100.00%	
