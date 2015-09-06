@@ -10,7 +10,7 @@ A collection of useful micro-modules for Lua.
  * [knife.memoize](readme/memoize.md) - A memoization function.
  * [knife.system](readme/system.md) - An entity component system.
  * [knife.test](readme/test.md) - A fixture-free test framework.
- * [knife.tween](readme/tween.md) - Interpolate values with ease.
+ * [knife.timer](readme/timer.md) - Create timers and tweens.
 
 
 Each module is self-contained, with no dependencies.

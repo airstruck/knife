@@ -525,52 +525,52 @@
     	
     	-- Create a node representing a test section
     	local function createNode (parent, description, process)
- 156	    return setmetatable({
-  78	        parent = parent,
-  78	        description = description,
-  78	        process = process,
-  78	        nodes = {},
-  78	        activeNodeIndex = 1,
-  78	        currentNodeIndex = 0,
-  78	        assert = testAssert,
-  78	        error = testError,
- 156	    }, { __call = test })
+ 166	    return setmetatable({
+  83	        parent = parent,
+  83	        description = description,
+  83	        process = process,
+  83	        nodes = {},
+  83	        activeNodeIndex = 1,
+  83	        currentNodeIndex = 0,
+  83	        assert = testAssert,
+  83	        error = testError,
+ 166	    }, { __call = test })
     	end
     	
     	-- Run a node
     	local function runNode (node)
- 189	    node.currentNodeIndex = 0
- 189	    return node:process()
+ 202	    node.currentNodeIndex = 0
+ 202	    return node:process()
     	end
     	
     	-- Get the root node for a given node
     	local function getRootNode (node) 
- 165	    local parent = node.parent
- 165	    return parent and getRootNode(parent) or node
+ 177	    local parent = node.parent
+ 177	    return parent and getRootNode(parent) or node
     	end
     	
     	-- Update the active child node of the given node
     	local function updateActiveNode (node, description, process) 
- 111	    local activeNodeIndex = node.activeNodeIndex
- 111	    local nodes = node.nodes
- 111	    local activeNode = nodes[activeNodeIndex]
+ 119	    local activeNodeIndex = node.activeNodeIndex
+ 119	    local nodes = node.nodes
+ 119	    local activeNode = nodes[activeNodeIndex]
     	
- 111	    if not activeNode then
-  67	        activeNode = createNode(node, description, process)
-  67	        nodes[activeNodeIndex] = activeNode
+ 119	    if not activeNode then
+  72	        activeNode = createNode(node, description, process)
+  72	        nodes[activeNodeIndex] = activeNode
     	    else 
-  44	        activeNode.process = process
+  47	        activeNode.process = process
     	    end
     	    
- 111	    getRootNode(node).lastActiveLeaf = activeNode
+ 119	    getRootNode(node).lastActiveLeaf = activeNode
     	
- 111	    return activeNode
+ 119	    return activeNode
     	end
     	
     	-- Run the active child node of the given node
     	local function runActiveNode (node, description, process) 
- 111	    local activeNode = updateActiveNode(node, description, process)
- 111	    return runNode(activeNode)
+ 119	    local activeNode = updateActiveNode(node, description, process)
+ 119	    return runNode(activeNode)
     	end
     	
     	-- Get ancestors of a node, including the node
@@ -604,18 +604,18 @@
     	
     	-- Create a branch node for a test scenario
     	test = function (node, description, process) 
- 475	    node.currentNodeIndex = node.currentNodeIndex + 1
- 475	    if node.currentNodeIndex == node.activeNodeIndex then
- 111	        return runActiveNode(node, description, process) 
+ 520	    node.currentNodeIndex = node.currentNodeIndex + 1
+ 520	    if node.currentNodeIndex == node.activeNodeIndex then
+ 119	        return runActiveNode(node, description, process) 
     	    end
     	end
     	
     	-- Test an assertion
     	testAssert = function (self, value, description)
- 202	    if not value then
+ 211	    if not value then
    1	        return failAssert(self, description, 'Test failed: assertion failed')
     	    end
- 201	    return value
+ 210	    return value
     	end
     	
     	-- Expect function f to fail
@@ -630,10 +630,10 @@
   11	    local root = createNode(nil, description, process)
     	    
   11	    runNode(root)
-  78	    while root.activeNodeIndex <= #root.nodes do
-  67	        local lastActiveBranch = root.lastActiveLeaf.parent
-  67	        lastActiveBranch.activeNodeIndex = lastActiveBranch.activeNodeIndex + 1
-  67	        runNode(root)
+  83	    while root.activeNodeIndex <= #root.nodes do
+  72	        local lastActiveBranch = root.lastActiveLeaf.parent
+  72	        lastActiveBranch.activeNodeIndex = lastActiveBranch.activeNodeIndex + 1
+  72	        runNode(root)
     	    end
     	    
   11	    return root
@@ -652,39 +652,164 @@
     	
 
 ==============================================================================
-./knife/tween.lua
+./knife/timer.lua
 ==============================================================================
-   1	local Tween = {}
+   1	local Timer = {}
     	
-    	local function remove (array, index)
-   5	    array[index] = array[#array]
-   5	    array[index].index = index
-   5	    array[#array] = nil
+    	-- group management
+    	
+    	local function detach (group, item)
+  15	    local index = item.index
+    	
+  15	    group[index] = group[#group]
+  15	    group[index].index = index
+  15	    group[#group] = nil
+  15	    item.groupField = nil
     	end
     	
-    	local function append (array, item)
-   7	    local index = #array + 1
-   7	    item.index = index
-   7	    array[index] = item
+    	local function attach (group, item)
+  19	    if item.groupField then
+   8	        detach (item.groupField, item)
+    	    end
+    	
+  19	    local index = #group + 1
+    	
+  19	    item.index = index
+  19	    group[index] = item
+  19	    item.groupField = group
     	end
     	
-    	local function define (definition)
-   4	    local plan = {}
+    	-- instance update methods
+    	
+    	local function updateContinuous (self, dt)
+   3	    local cutoff = self.cutoff
+   3	    local elapsed = self.elapsed + dt
+    	
+   3	    if self:callback(dt) == false or elapsed >= cutoff then
+   1	        if self.finishField then
+   1	            self:finishField(elapsed - cutoff)
+    	        end
+   1	        self:remove()
+    	    end
+    	
+   3	    self.elapsed = elapsed
+    	
+   3	    return
+    	end
+    	
+    	local function updateIntermittent (self, dt)
+   6	    local duration = self.delay or self.interval
+   6	    local elapsed = self.elapsed + dt
+    	
+   9	    while elapsed >= duration do
+   7	        elapsed = elapsed - duration
+   7	        if self.countField then
+   4	            self.countField = self.countField - 1
+    	        end
+   7	        if self:callback(elapsed) == false
+   7	        or self.delay or self.countField == 0 then
+   4	            if self.finishField then
+   1	                self:finishField(elapsed)
+    	            end
+   4	            self:remove()
+   4	            return
+    	        end
+    	    end
+    	
+   2	    self.elapsed = elapsed
+    	end
+    	
+    	local function updateTween (self, dt)
+   8	    local elapsed = self.elapsed + dt
+   8	    local plan = self.plan
+   8	    local duration = self.duration
+    	
+   8	    self.elapsed = elapsed
+    	
+   8	    if elapsed >= duration then
+   3	        for index = 1, #plan do
+   2	            local task = plan[index]
+    	
+   2	            task.target[task.key] = task.final
+    	        end
+   1	        if self.finishField then
+   1	            self:finishField(elapsed - duration)
+    	        end
+   1	        self:remove()
+   1	        return
+    	    end
+    	
+   7	    local ease = self.easeField
+    	
+  21	    for index = 1, #plan do
+  14	        local task = plan[index]
+  14	        local target, key = task.target, task.key
+  14	        local initial, change = task.initial, task.change
+    	
+  14	        target[key] = ease(elapsed, initial, change, duration)
+    	    end
+    	
+    	end
+    	
+    	-- shared instance methods
+    	
+   1	local defaultGroup = {}
+    	
+    	local function group (self, group)
+  10	    if not group then
+   2	        group = defaultGroup
+    	    end
+    	
+  10	    attach(group, self)
+    	
+  10	    return self
+    	end
+    	
+    	local function remove (self)
+   7	    if self.groupField then
+   7	        detach(self.groupField, self)
+    	    end
     	    
+   7	    return self
+    	end
+    	
+    	local function count (self, countField)
+   1	    self.countField = countField
+    	
+   1	    return self
+    	end
+    	
+    	local function finish (self, finishField)
+   5	    self.finishField = finishField
+    	
+   5	    return self
+    	end
+    	
+    	local function ease (self, easeField)
+   3	    self.easeField = easeField
+    	
+   3	    return self
+    	end
+    	
+    	-- tweening helper functions
+    	
+    	local function planTween (definition)
+   4	    local plan = {}
+    	
    8	    for target, values in pairs(definition) do
   12	        for key, final in pairs(values) do
    8	            local initial = target[key]
-    	            
+    	
    8	            plan[#plan + 1] = {
    8	                target = target,
-   8	                key = key, 
+   8	                key = key,
    8	                initial = initial,
    8	                final = final,
    8	                change = final - initial,
    8	            }
     	        end
     	    end
-    	    
+    	
    4	    return plan
     	end
     	
@@ -692,96 +817,79 @@
    2	    return change * elapsed / duration + initial
     	end
     	
-    	local function update (self, dt)
-   8	    local elapsed = self.elapsed + dt
-   8	    local plan = self.plan
-   8	    local duration = self.duration
-    	    
-   8	    self.elapsed = elapsed
-    	        
-   8	    if elapsed >= duration then
-   3	        for index = 1, #plan do
-   2	            local task = plan[index]
-    	            
-   2	            task.target[task.key] = task.final
-    	        end
-   1	        if self.callback then
-   1	            self:callback(elapsed - duration)
-    	        end
-   1	        self:stop()
-   1	        return
-    	    end
-    	    
-   7	    local ease = self.easingFunction
-    	    
-  21	    for index = 1, #plan do
-  14	        local task = plan[index]
-  14	        local target, key = task.target, task.key
-  14	        local initial, change = task.initial, task.change
-    	        
-  14	        target[key] = ease(elapsed, initial, change, duration)
-    	    end
-    	    
+    	-- instance initializer
+    	
+    	local function initialize (timer)
+   9	    timer.elapsed = 0
+   9	    timer.group = group
+   9	    timer.remove = remove
+    	
+   9	    attach(defaultGroup, timer)
+    	
+   9	    return timer
     	end
     	
-    	local function ease (self, easingFunction)
-   3	    self.easingFunction = easingFunction
-    	    
-   3	    return self
+    	-- static api
+    	
+   1	function Timer.after (delay, callback)
+   6	    return initialize {
+   3	        delay = delay,
+   3	        callback = callback,
+   3	        update = updateIntermittent,
+    	    }
     	end
     	
-    	local function finish (self, callback)
-   3	    self.callback = callback
-    	    
-   3	    return self
+   1	function Timer.every (interval, callback)
+   2	    return initialize {
+   1	        interval = interval,
+   1	        callback = callback,
+   1	        update = updateIntermittent,
+   1	        count = count,
+   1	        finish = finish,
+    	     }
     	end
     	
-    	local function group (self, group)
-   3	    remove(self.ownerGroup, self.index)
-   3	    append(group, self)
-   3	    self.ownerGroup = group
-    	    
-   3	    return self
+   1	function Timer.prior (cutoff, callback)
+   2	    return initialize {
+   1	        cutoff = cutoff,
+   1	        callback = callback,
+   1	        update = updateContinuous,
+   1	        finish = finish,
+    	    }
     	end
     	
-    	local function stop (self)
-   2	    remove(self.ownerGroup, self.index)
-    	    
-   2	    return self
-    	end
-    	
-   1	local defaultGroup = {}
-    	
-    	local function construct (_, duration, definition)
-   4	    local instance = {
+   1	function Timer.tween (duration, definition)
+   8	    return initialize {
    4	        duration = duration,
-   4	        plan = define(definition),
-   4	        elapsed = 0,
-   4	        easingFunction = easeLinear,
-   4	        ownerGroup = defaultGroup,
-   4	        update = update,
+   4	        plan = planTween(definition),
+   4	        update = updateTween,
+   4	        easeField = easeLinear,
    4	        ease = ease,
    4	        finish = finish,
-   4	        group = group,
-   4	        stop = stop,
     	    }
-    	    
-   4	    append(defaultGroup, instance)
-    	    
-   4	    return instance
     	end
     	
-   1	function Tween.update (dt, group)
-   9	    if not group then
+   1	function Timer.update (dt, group)
+  21	    if not group then
    1	        group = defaultGroup
     	    end
-  17	    for index = #group, 1, -1 do
-   8	        group[index]:update(dt)
+  38	    for index = #group, 1, -1 do
+  17	        group[index]:update(dt)
     	    end
     	end
     	
-   1	return setmetatable(Tween, { __call = construct })
+   1	function Timer.clear (group)
+   1	    if not group then
+   1	        group = defaultGroup
+    	    end
+   2	    for i = 1, #group do
+   1	        group[i] = nil
+    	    end
+    	end
     	
+   1	Timer.defaultGroup = defaultGroup
+    	
+   1	return Timer
 
 ==============================================================================
 ./spec/base.lua
@@ -1557,22 +1665,88 @@
     	end)
 
 ==============================================================================
-./spec/tween.lua
+./spec/timer.lua
 ==============================================================================
-   2	T('Given Tween, a target object, and an update function', function (T)
-   5	    local Tween = require 'knife.tween'
+   2	T('Given Timer, a target object, and an update function', function (T)
+  10	    local Timer = require 'knife.timer'
     	
-   5	    local group = {}
+  10	    local group = {}
     	
-   5	    local target = { x = 100, y = 200, z = 300 }
+  10	    local target = { x = 100, y = 200, z = 300 }
     	
     	    local function update (dt, group)
-   9	        Tween.update(dt, group)
+  21	        Timer.update(dt, group)
     	    end
     	
-  10	    T('When a tween is created and update is called', function (T)
+  20	    T('When an "after" timer is created and update is called', function (T)
    3	        local test = 0
-   3	        local tween = Tween(10, { [target] = { x = 200, y = 400 } })
+   6	        local timer = Timer.after(1, function (self, late) test = late end)
+   3	            :group(group)
+    	
+   3	        update(3, group)
+    	
+   6	        T:assert(test == 2,
+   3	        'Then callback fires')
+    	
+   6	        T('When group is called with no arguments', function (T)
+   2	            timer:group()
+    	
+   4	            T:assert(timer.groupField == Timer.defaultGroup,
+   2	            'Then the timer is attached the default group')
+    	
+   4	            T('When Timer.clear is called with no arguments', function (T)
+   1	                assert(#Timer.defaultGroup > 0)
+    	
+   1	                Timer.clear()
+    	
+   2	                T:assert(#Timer.defaultGroup == 0,
+   1	                'Then the default group is cleared')
+    	            end)
+    	
+    	        end)
+    	
+    	    end)
+    	
+  20	    T('When an "every" timer is created and update is called', function (T)
+   1	        local test = 0
+    	        local test2
+   5	        local timer = Timer.every(1, function () test = test + 1 end)
+   1	            :group(group)
+   1	            :count(4)
+   2	            :finish(function () test2 = 1 end)
+    	
+   1	        update(3, group)
+   1	        update(1, group)
+   1	        update(1, group)
+    	
+   2	        T:assert(test == 4,
+   1	        'Then callback fires')
+    	    end)
+    	
+  20	    T('When a "prior" timer is created and update is called', function (T)
+   1	        local test = 0
+    	        local test2
+   4	        local timer = Timer.prior(3, function (self, dt) test = test + dt end)
+   1	            :group(group)
+   2	            :finish(function () test2 = 1 end)
+    	
+   1	        update(1, group)
+   1	        update(1, group)
+   1	        update(1, group)
+   1	        update(1, group)
+   1	        update(1, group)
+   1	        update(1, group)
+    	
+   2	        T:assert(test == 3,
+   1	        'Then callback fires')
+   2	        T:assert(test2 == 1,
+   1	        'Then finalizer fires')
+    	
+    	    end)
+    	
+  20	    T('When a tween is created and update is called', function (T)
+   3	        local test = 0
+   3	        local tween = Timer.tween(10, { [target] = { x = 200, y = 400 } })
    3	            :group(group)
    4	            :finish(function () test = 1 end)
   15	            :ease(function (t, b, c, d) return c * t / d + b end)
@@ -1585,7 +1759,7 @@
    3	        'Then the target values are interpolated x2')
     	
    6	        T('When the tween is stopped and update is called', function (T)
-   1	            tween:stop()
+   1	            tween:remove()
    1	            update(0.1, group)
    2	            T:assert(target.x == 102 and target.y == 204,
    1	            'Then the target values are not interpolated')
@@ -1601,8 +1775,8 @@
     	
     	    end)
     	
-  10	    T('When a simple tween is created and update is called', function (T)
-   1	        local tween = Tween(10, { [target] = { x = 200, y = 400 } })
+  20	    T('When a simple tween is created and update is called', function (T)
+   1	        Timer.tween(10, { [target] = { x = 200, y = 400 } })
    1	        update(0.1)
    2	        T:assert(target.x == 101 and target.y == 202,
    1	        'Then the target values are interpolated')
@@ -1622,7 +1796,7 @@ Summary
 43	0	100.00%	./knife/memoize.lua
 78	0	100.00%	./knife/system.lua
 62	0	100.00%	./knife/test.lua
-68	0	100.00%	./knife/tween.lua
+121	0	100.00%	./knife/timer.lua
 39	0	100.00%	./spec/base.lua
 43	0	100.00%	./spec/behavior.lua
 19	0	100.00%	./spec/chain.lua
@@ -1631,6 +1805,6 @@ Summary
 111	0	100.00%	./spec/memoize.lua
 74	0	100.00%	./spec/system.lua
 42	0	100.00%	./spec/test.lua
-33	0	100.00%	./spec/tween.lua
+75	0	100.00%	./spec/timer.lua
 ------------------------
-847	0	100.00%	
+942	0	100.00%	
