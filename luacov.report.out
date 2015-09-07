@@ -703,11 +703,11 @@
     	
    9	    while elapsed >= duration do
    7	        elapsed = elapsed - duration
-   7	        if self.countField then
-   4	            self.countField = self.countField - 1
+   7	        if self.limitField then
+   4	            self.limitField = self.limitField - 1
     	        end
    7	        if self:callback(elapsed) == false
-   7	        or self.delay or self.countField == 0 then
+   7	        or self.delay or self.limitField == 0 then
    4	            if self.finishField then
    1	                self:finishField(elapsed)
     	            end
@@ -769,12 +769,12 @@
    7	    if self.groupField then
    7	        detach(self.groupField, self)
     	    end
-    	    
+    	
    7	    return self
     	end
     	
-    	local function count (self, countField)
-   1	    self.countField = countField
+    	local function limit (self, limitField)
+   1	    self.limitField = limitField
     	
    1	    return self
     	end
@@ -844,7 +844,7 @@
    1	        interval = interval,
    1	        callback = callback,
    1	        update = updateIntermittent,
-   1	        count = count,
+   1	        limit = limit,
    1	        finish = finish,
     	     }
     	end
@@ -1712,7 +1712,7 @@
     	        local test2
    5	        local timer = Timer.every(1, function () test = test + 1 end)
    1	            :group(group)
-   1	            :count(4)
+   1	            :limit(4)
    2	            :finish(function () test2 = 1 end)
     	
    1	        update(3, group)

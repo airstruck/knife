@@ -43,7 +43,7 @@ T('Given Timer, a target object, and an update function', function (T)
         local test2
         local timer = Timer.every(1, function () test = test + 1 end)
             :group(group)
-            :count(4)
+            :limit(4)
             :finish(function () test2 = 1 end)
 
         update(3, group)

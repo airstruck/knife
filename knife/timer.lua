@@ -47,11 +47,11 @@ local function updateIntermittent (self, dt)
 
     while elapsed >= duration do
         elapsed = elapsed - duration
-        if self.countField then
-            self.countField = self.countField - 1
+        if self.limitField then
+            self.limitField = self.limitField - 1
         end
         if self:callback(elapsed) == false
-        or self.delay or self.countField == 0 then
+        or self.delay or self.limitField == 0 then
             if self.finishField then
                 self:finishField(elapsed)
             end
@@ -113,12 +113,12 @@ local function remove (self)
     if self.groupField then
         detach(self.groupField, self)
     end
-    
+
     return self
 end
 
-local function count (self, countField)
-    self.countField = countField
+local function limit (self, limitField)
+    self.limitField = limitField
 
     return self
 end
@@ -188,7 +188,7 @@ function Timer.every (interval, callback)
         interval = interval,
         callback = callback,
         update = updateIntermittent,
-        count = count,
+        limit = limit,
         finish = finish,
      }
 end
