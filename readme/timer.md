@@ -2,7 +2,9 @@
 
 Create timers and tweens.
 
-    local Timer = require 'knife.timer'
+```lua
+local Timer = require 'knife.timer'
+```
 
 ## Timer.after (delay, callback) -> timer
 
@@ -26,8 +28,10 @@ will execute once after `delay` seconds.
 
 ### Example
 
-    print 'Self-destructing in 5 seconds.'
-    Timer.after(5, function () print 'Boom!' end)
+```lua
+print 'Self-destructing in 5 seconds.'
+Timer.after(5, function () print 'Boom!' end)
+```
 
 ## Timer.every (interval, callback) -> timer
 
@@ -51,8 +55,10 @@ will execute once every `interval` seconds.
 
 ### Example
 
-    print 'Explosives set!'
-    Timer.every(1, function () print 'Tick!' end)
+```lua
+print 'Explosives set!'
+Timer.every(1, function () print 'Tick!' end)
+```
 
 ## Timer.prior (cutoff, callback) -> timer
 
@@ -76,9 +82,11 @@ will execute once every update until `cutoff` seconds.
 
 ### Example
 
-    print 'Going up!'
-    elevator.y = 500
-    Timer.prior(10, function (timer, dt) elevator.y = elevator.y - dt end)
+```lua
+print 'Going up!'
+elevator.y = 500
+Timer.prior(10, function (timer, dt) elevator.y = elevator.y - dt end)
+```
 
 ## Timer.tween (duration, definition) -> timer
 
@@ -101,22 +109,24 @@ Create a tween timer and insert it into the default group.
 
 ### Example
 
-    -- Create some objects with values to tween.
+```lua
+-- Create some objects with values to tween.
 
-    local vehicle = { fuel = 99, position = { x = 10, y = 30 } }
-    local overlay = { opacity = 0, color = { 0, 0, 0 } }
+local vehicle = { fuel = 99, position = { x = 10, y = 30 } }
+local overlay = { opacity = 0, color = { 0, 0, 0 } }
 
-    -- Create a tween.
+-- Create a tween.
 
-    -- This tween takes 10 seconds to complete
-    Timer.tween(10, {
-        -- Vehicle's fuel is depleted as it moves from left to right
-        [vehicle] = { fuel = 0 },
-        [vehicle.position] = { x = 100 },
-        -- Meanwhile, overlay fades in as color changes from black to red
-        [overlay] = { opacity = 1 },
-        [overlay.color] = { 255, 0, 0 },
-    })
+-- This tween takes 10 seconds to complete
+Timer.tween(10, {
+    -- Vehicle's fuel is depleted as it moves from left to right
+    [vehicle] = { fuel = 0 },
+    [vehicle.position] = { x = 100 },
+    -- Meanwhile, overlay fades in as color changes from black to red
+    [overlay] = { opacity = 1 },
+    [overlay.color] = { 255, 0, 0 },
+})
+```
 
 ## Timer.update (dt [, timers])
 
@@ -134,9 +144,11 @@ Update all timers in group `timers`, or in the default group if omitted.
 
 ### Example
 
-    function love.update (dt)
-        Timer.update(dt)
-    end
+```lua
+function love.update (dt)
+    Timer.update(dt)
+end
+```
 
 ## Timer.clear ([timers])
 
@@ -150,7 +162,9 @@ Clear all timers from group `timers`, or from the default group if omitted.
 
 ### Example
 
-    Timer.clear()
+```lua
+Timer.clear()
+```
 
 ## timer:group ([timers])
 
@@ -168,10 +182,12 @@ Applies to all timers.
 
 ### Example
 
-    local bombTimers = {}
+```lua
+local bombTimers = {}
 
-    Timer.every(1, function () print 'Tick!' end)
-        :group(bombTimers)
+Timer.every(1, function () print 'Tick!' end)
+    :group(bombTimers)
+```
 
 ## timer:limit (runs)
 
@@ -187,8 +203,10 @@ Applies only to timers created with `Timer.every`.
 
 ### Example
 
-    Timer.every(1, function () print 'Tick!' end)
-        :limit(5)
+```lua
+Timer.every(1, function () print 'Tick!' end)
+    :limit(5)
+```
 
 ## timer:finish (callback)
 
@@ -206,9 +224,11 @@ Applies to all timers except those created with `Timer.after`.
 
 ### Example
 
-    Timer.every(1, function () print 'Tick!' end)
-        :finish(function () print 'Boom!' end)
-        :limit(5)
+```lua
+Timer.every(1, function () print 'Tick!' end)
+    :finish(function () print 'Boom!' end)
+    :limit(5)
+```
 
 ## timer:ease (easing)
 
@@ -226,12 +246,14 @@ Applies only to timers created with `Timer.tween`.
 
 ### Example
 
-    local Easing = require 'easing'
+```lua
+local Easing = require 'easing'
 
-    local overlay = { opacity = 0 }
+local overlay = { opacity = 0 }
 
-    Timer.tween(1, { [overlay] = { opacity = 1 } })
-        :ease(Easing.outQuad)
+Timer.tween(1, { [overlay] = { opacity = 1 } })
+    :ease(Easing.outQuad)
+```
 
 ## timer:remove ()
 
@@ -241,11 +263,13 @@ Applies to all timers.
 
 ### Example
 
-    local ticker = Timer.every(1, function () print 'Tick!' end)
+```lua
+local ticker = Timer.every(1, function () print 'Tick!' end)
 
-    local function defuse ()
-        ticker:remove()
-    end
+local function defuse ()
+    ticker:remove()
+end
+```
 
 ## Caveats/features
 

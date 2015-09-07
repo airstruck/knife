@@ -6,22 +6,28 @@ An entity component system.
 
 Require the library.
 
-    local System = require 'knife.system'
+```lua
+local System = require 'knife.system'
+```
 
 Define a system.
 
-    local updateMotion = System(
-    { 'position', 'velocity' },
-    function (p, v, dt)
-        p.x = p.x + v.x * dt
-        p.y = p.y + v.y * dt
-    end)
+```lua
+local updateMotion = System(
+{ 'position', 'velocity' },
+function (p, v, dt)
+    p.x = p.x + v.x * dt
+    p.y = p.y + v.y * dt
+end)
+```
 
 Invoke a system. Pass in an entities list, followed by any optional arguments.
 
-    function love.update (dt)
-        updateMotion(entities, dt)
-    end
+```lua
+function love.update (dt)
+    updateMotion(entities, dt)
+end
+```
 
 ## API
 

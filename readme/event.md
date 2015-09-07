@@ -2,7 +2,9 @@
 
 Dispatch and handle events.
 
-    local Event = require 'knife.event'
+```lua
+local Event = require 'knife.event'
+```
 
 ## Event.on (name, callback) -> event
 
@@ -26,10 +28,12 @@ Handle events of type `name` with `callback`.
 
 ### Example
 
-    local timeRemaining = 30
-    Event.on('update', function (dt)
-        timeRemaining = timeRemaining - dt
-    end)
+```lua
+local timeRemaining = 30
+Event.on('update', function (dt)
+    timeRemaining = timeRemaining - dt
+end)
+```
 
 ## Event.dispatch (name [, ...])
 
@@ -47,9 +51,11 @@ Dispatch an event of type `name` with optional arguments.
 
 ### Example
 
-    if entity.health <= 0 then
-        Event.dispatch('death', entity)
-    end
+```lua
+if entity.health <= 0 then
+    Event.dispatch('death', entity)
+end
+```
 
 ## Event.injectDispatchers (target [, keys])
 
@@ -68,9 +74,11 @@ fields if omitted.
 
 ### Example
 
-    -- Intercept Love events and callbacks.
-    Event.injectDispatchers(love.handlers)
-    Event.injectDispatchers(love, { 'load', 'update', 'draw' })
+```lua
+-- Intercept Love events and callbacks.
+Event.injectDispatchers(love.handlers)
+Event.injectDispatchers(love, { 'load', 'update', 'draw' })
+```
 
 ## event:remove ()
 
@@ -78,13 +86,15 @@ Remove an event handler.
 
 ### Example
 
-    -- Define a handler and store a reference in a local variable.
-    local deathHandler = Event.on('death', function (entity)
-        print(entity.name .. ' died!')
-    end)
+```lua
+-- Define a handler and store a reference in a local variable.
+local deathHandler = Event.on('death', function (entity)
+    print(entity.name .. ' died!')
+end)
 
-    -- Remove the handler.
-    deathHandler:remove()
+-- Remove the handler.
+deathHandler:remove()
+```
 
 ## Caveats/features
 

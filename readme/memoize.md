@@ -2,7 +2,9 @@
 
 A memoization function.
 
-    local Memoize = require 'knife.memoize'
+```lua
+local Memoize = require 'knife.memoize'
+```
 
 ## Memoize (func)
 
@@ -17,6 +19,16 @@ Memoize a function.
 ### Returns
 
 - Memoized function.
+
+### Example
+
+```lua
+function fibonacci (n)
+  return n < 2 and n or fibonacci(n - 1) + fibonacci(n - 2)
+end
+
+fibonacci = Memoize(fibonacci)
+```
 
 ## Caveats/features
 

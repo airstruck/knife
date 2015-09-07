@@ -6,37 +6,45 @@ A state machine manager.
 
 Require the library.
 
-    local Behavior = require 'knife.behavior'
+```lua
+local Behavior = require 'knife.behavior'
+```
 
 Define a table containing states.
 
-    local states = {
-        default = {
-            { duration = 0, after = 'idle' },
-        },
-        idle = {
-            { sprite = 'human.idle.a', duration = 3 },
-            { sprite = 'human.idle.b', duration = 1 },
-            { sprite = 'human.idle.a', duration = 2 },
-            { sprite = 'human.idle.c', duration = 1, action = think },
-        },
-        walk = {
-            { sprite = 'human.run.a', duration = 0.2 },
-            { sprite = 'human.run.b', duration = 0.2 },
-            { sprite = 'human.run.c', duration = 0.2 },
-            { sprite = 'human.run.b', duration = 0.2 },
-        },
-    }
+```lua
+local states = {
+    default = {
+        { duration = 0, after = 'idle' },
+    },
+    idle = {
+        { sprite = 'human.idle.a', duration = 3 },
+        { sprite = 'human.idle.b', duration = 1 },
+        { sprite = 'human.idle.a', duration = 2 },
+        { sprite = 'human.idle.c', duration = 1, action = think },
+    },
+    walk = {
+        { sprite = 'human.run.a', duration = 0.2 },
+        { sprite = 'human.run.b', duration = 0.2 },
+        { sprite = 'human.run.c', duration = 0.2 },
+        { sprite = 'human.run.b', duration = 0.2 },
+    },
+}
+```
 
 Create a behavior object.
 
-    local behavior = Behavior(states)
+```lua
+local behavior = Behavior(states)
+```
 
 Update the behavior object with the time delta.
 
-    function love.update (dt)
-        behavior:update(dt)
-    end
+```lua
+function love.update (dt)
+    behavior:update(dt)
+end
+```
 
 ## States
 

@@ -6,31 +6,35 @@ Flatten async code with chained functions.
 
 Heavy use of callbacks can lead to deeply nested, hard to maintain code:
 
-    print 'fading in'
+```lua
+print 'fading in'
+Timer.add(1, function ()
+    print 'showing splash screen'
     Timer.add(1, function ()
-        print 'showing splash screen'
+        print 'showing title screen'
         Timer.add(1, function ()
-            print 'showing title screen'
-            Timer.add(1, function ()
-                print 'playing demo'
-            end)
+            print 'playing demo'
         end)
     end)
+end)
+```
 
 Chain can be used to remedy that. The example above can be written like this:
 
-    Chain(function (continue)
-        print 'fading in'
-        Timer.add(1, continue)
-    end)(function (continue)
-        print 'showing splash screen'
-        Timer.add(1, continue)
-    end)(function (continue)
-        print 'showing title screen'
-        Timer.add(1, continue)
-    end)(function (continue)
-        print 'playing demo'
-    end)()
+```lua
+Chain(function (continue)
+    print 'fading in'
+    Timer.add(1, continue)
+end)(function (continue)
+    print 'showing splash screen'
+    Timer.add(1, continue)
+end)(function (continue)
+    print 'showing title screen'
+    Timer.add(1, continue)
+end)(function (continue)
+    print 'playing demo'
+end)()
+```
 
 ## API
 
@@ -57,14 +61,16 @@ as `Chain` itself, with two additional behaviors:
 
 - References to any link in the chain are identical. For example:
 
-        local c1 = Chain(function (continue)
-            print 'link one'
-            continue()
-        end)
+  ```lua
+  local c1 = Chain(function (continue)
+      print 'link one'
+      continue()
+  end)
 
-        local c2 = c1(function (continue)
-            print 'link two'
-            continue()
-        end)
+  local c2 = c1(function (continue)
+      print 'link two'
+      continue()
+  end)
 
-        assert(c1 == c2) -- passes
+  assert(c1 == c2) -- passes
+  ```
