@@ -2,36 +2,89 @@
 
 Dispatch and handle events.
 
-## Example usage
-
-Require the library.
-
     local Event = require 'knife.event'
 
-Intercept Love events and callbacks.
+## Event.on (name, callback) -> event
 
+Handle events of type `name` with `callback`.
+
+### Parameters
+
+- *string* **name**
+
+  Type of events to handle.
+
+- *function* **callback (...)**
+
+  Callback to execute. Receives any number of optional parameters matching
+  arguments passed when the event is dispatched. Callbacks may return `false`
+  to prevent other handlers from handling the event.
+
+### Returns
+
+- An event instance.
+
+### Example
+
+    local timeRemaining = 30
+    Event.on('update', function (dt)
+        timeRemaining = timeRemaining - dt
+    end)
+
+## Event.dispatch (name [, ...])
+
+Dispatch an event of type `name` with optional arguments.
+
+### Parameters
+
+- *string* **name**
+
+  Type of event to dispatch.
+
+- *mixed* **...**
+
+  Optional arguments to pass to event handlers.
+
+### Example
+
+    if entity.health <= 0 then
+        Event.dispatch('death', entity)
+    end
+
+## Event.injectDispatchers (target [, keys])
+
+Inject dispatchers into `target` table in fields with matching `keys`, or all
+fields if omitted.
+
+### Parameters
+
+- *table* **target**
+
+  Table to inject dispatchers into.
+
+- *table* **keys**
+
+  Optional array of keys identifying fields to inject dispatchers into.
+
+### Example
+
+    -- Intercept Love events and callbacks.
     Event.injectDispatchers(love.handlers)
     Event.injectDispatchers(love, { 'load', 'update', 'draw' })
 
-Define an event handler.
+## event:remove ()
 
-    Event.on('update', function (dt)
-        myGame:updateStuff(dt)
+Remove an event handler.
+
+### Example
+
+    -- Define a handler and store a reference in a local variable.
+    local deathHandler = Event.on('death', function (entity)
+        print(entity.name .. ' died!')
     end)
 
-Define a handler and store it in a local variable.
-
-    local keyHandler = Event.on('keypressed', function (b, s, r)
-        myGame:mashButtons(b, s, r)
-    end)
-
-Remove a handler.
-
-    keyHandler:remove()
-
-Dispatch a custom event.
-
-    Event.dispatch('pebkac', keyboard, chair)
+    -- Remove the handler.
+    deathHandler:remove()
 
 ## Caveats/features
 
