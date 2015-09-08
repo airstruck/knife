@@ -8,11 +8,11 @@ Heavy use of callbacks can lead to deeply nested, hard to maintain code:
 
 ```lua
 print 'fading in'
-Timer.add(1, function ()
+Timer.after(1, function ()
     print 'showing splash screen'
-    Timer.add(1, function ()
+    Timer.after(1, function ()
         print 'showing title screen'
-        Timer.add(1, function ()
+        Timer.after(1, function ()
             print 'playing demo'
         end)
     end)
@@ -24,13 +24,13 @@ Chain can be used to remedy that. The example above can be written like this:
 ```lua
 Chain(function (continue)
     print 'fading in'
-    Timer.add(1, continue)
+    Timer.after(1, continue)
 end)(function (continue)
     print 'showing splash screen'
-    Timer.add(1, continue)
+    Timer.after(1, continue)
 end)(function (continue)
     print 'showing title screen'
-    Timer.add(1, continue)
+    Timer.after(1, continue)
 end)(function (continue)
     print 'playing demo'
 end)()
