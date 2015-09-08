@@ -2,6 +2,8 @@
 
 A collection of useful micro-modules for Lua.
 
+![Knife logo](knife.png)
+
  * [knife.base](readme/base.md) - A base class for class-based OOP.
  * [knife.behavior](readme/behavior.md) - A state machine manager.
  * [knife.chain](readme/chain.md) - Flatten async code with chained functions.
