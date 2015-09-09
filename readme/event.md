@@ -6,7 +6,7 @@ Dispatch and handle events.
 local Event = require 'knife.event'
 ```
 
-## Event.on (name, callback) -> event
+## Event.on (name, callback) -> handler
 
 Handle events of type `name` with `callback`.
 
@@ -24,7 +24,7 @@ Handle events of type `name` with `callback`.
 
 ### Returns
 
-- An event instance.
+- An event handler instance.
 
 ### Example
 
@@ -80,7 +80,7 @@ Event.injectDispatchers(love.handlers)
 Event.injectDispatchers(love, { 'load', 'update', 'draw' })
 ```
 
-## event:remove ()
+## handler:remove ()
 
 Remove an event handler.
 
@@ -94,6 +94,16 @@ end)
 
 -- Remove the handler.
 deathHandler:remove()
+```
+## handler:register ()
+
+Register a previously removed event handler (newly created handlers are already
+registered).
+
+### Example
+
+```lua
+deathHandler:register()
 ```
 
 ## Caveats/features
