@@ -5,7 +5,10 @@ local Event = {}
 Event.handlers = {}
 
 -- Remove an event handler from the registry
-local function removeHandler (self)
+local function remove (self)
+    if not self.isRegistered then
+        return self
+    end
     if self.prevHandler then
         self.prevHandler.nextHandler = self.nextHandler
     end
@@ -17,27 +20,38 @@ local function removeHandler (self)
     end
     self.prevHandler = nil
     self.nextHandler = nil
+    self.isRegistered = false
+
+    return self
+end
+
+-- Insert an event handler into the registry
+local function register (self)
+    if self.isRegistered then
+        return self
+    end
+    self.nextHandler = Event.handlers[self.name]
+    if self.nextHandler then
+        self.nextHandler.prevHandler = self
+    end
+    Event.handlers[self.name] = self
+    self.isRegistered = true
+
+    return self
 end
 
 -- Create an event handler
 local function Handler (name, callback)
-    return { 
-        name = name, 
-        callback = callback, 
-        remove = removeHandler
+    return {
+        name = name,
+        callback = callback,
+        isRegistered = false,
+        remove = remove,
+        register = register
     }
 end
 
--- Insert an event handler into the registry
-local function register (handler)
-    handler.nextHandler = Event.handlers[handler.name]
-    if handler.nextHandler then
-        handler.nextHandler.prevHandler = handler
-    end
-    Event.handlers[handler.name] = handler
-    
-    return handler
-end
+
 
 -- Create and register a new event handler
 function Event.on (name, callback)
@@ -47,9 +61,9 @@ end
 -- Dispatch an event
 function Event.dispatch (name, ...)
     local handler = Event.handlers[name]
-    
+
     while handler do
-        if handler.callback(...) == false then 
+        if handler.callback(...) == false then
             return handler
         end
         handler = handler.nextHandler
@@ -72,11 +86,10 @@ function Event.injectDispatchers (t, keys)
             injectDispatcher(t, key)
         end
     else
-        for key in pairs(t) do 
+        for key in pairs(t) do
             injectDispatcher(t, key)
         end
     end
 end
 
 return Event
-

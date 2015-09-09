@@ -197,51 +197,65 @@
    1	Event.handlers = {}
     	
     	-- Remove an event handler from the registry
-    	local function removeHandler (self)
-   3	    if self.prevHandler then
+    	local function remove (self)
+   5	    if not self.isRegistered then
+   1	        return self
+    	    end
+   4	    if self.prevHandler then
    1	        self.prevHandler.nextHandler = self.nextHandler
     	    end
-   3	    if self.nextHandler then
+   4	    if self.nextHandler then
    1	        self.nextHandler.prevHandler = self.prevHandler
     	    end
-   3	    if Event.handlers[self.name] == self then
-   2	        Event.handlers[self.name] = self.nextHandler
+   4	    if Event.handlers[self.name] == self then
+   3	        Event.handlers[self.name] = self.nextHandler
     	    end
-   3	    self.prevHandler = nil
-   3	    self.nextHandler = nil
+   4	    self.prevHandler = nil
+   4	    self.nextHandler = nil
+   4	    self.isRegistered = false
+    	
+   4	    return self
+    	end
+    	
+    	-- Insert an event handler into the registry
+    	local function register (self)
+  19	    if self.isRegistered then
+   1	        return self
+    	    end
+  18	    self.nextHandler = Event.handlers[self.name]
+  18	    if self.nextHandler then
+   6	        self.nextHandler.prevHandler = self
+    	    end
+  18	    Event.handlers[self.name] = self
+  18	    self.isRegistered = true
+    	
+  18	    return self
     	end
     	
     	-- Create an event handler
     	local function Handler (name, callback)
-  15	    return { 
-  15	        name = name, 
-  15	        callback = callback, 
-  15	        remove = removeHandler
-  15	    }
+  18	    return {
+  18	        name = name,
+  18	        callback = callback,
+  18	        isRegistered = false,
+  18	        remove = remove,
+  18	        register = register
+  18	    }
     	end
     	
-    	-- Insert an event handler into the registry
-    	local function register (handler)
-  15	    handler.nextHandler = Event.handlers[handler.name]
-  15	    if handler.nextHandler then
-   5	        handler.nextHandler.prevHandler = handler
-    	    end
-  15	    Event.handlers[handler.name] = handler
-    	    
-  15	    return handler
-    	end
+    	
     	
     	-- Create and register a new event handler
    1	function Event.on (name, callback)
-  15	    return register(Handler(name, callback))
+  18	    return register(Handler(name, callback))
     	end
     	
     	-- Dispatch an event
    1	function Event.dispatch (name, ...)
-   8	    local handler = Event.handlers[name]
-    	    
-  15	    while handler do
-   8	        if handler.callback(...) == false then 
+   9	    local handler = Event.handlers[name]
+    	
+  16	    while handler do
+   8	        if handler.callback(...) == false then
    1	            return handler
     	        end
    7	        handler = handler.nextHandler
@@ -264,14 +278,13 @@
    1	            injectDispatcher(t, key)
     	        end
     	    else
-   2	        for key in pairs(t) do 
+   2	        for key in pairs(t) do
    1	            injectDispatcher(t, key)
     	        end
     	    end
     	end
     	
    1	return Event
-    	
 
 ==============================================================================
 ./knife/memoize.lua
@@ -525,52 +538,52 @@
     	
     	-- Create a node representing a test section
     	local function createNode (parent, description, process)
- 166	    return setmetatable({
-  83	        parent = parent,
-  83	        description = description,
-  83	        process = process,
-  83	        nodes = {},
-  83	        activeNodeIndex = 1,
-  83	        currentNodeIndex = 0,
-  83	        assert = testAssert,
-  83	        error = testError,
- 166	    }, { __call = test })
+ 170	    return setmetatable({
+  85	        parent = parent,
+  85	        description = description,
+  85	        process = process,
+  85	        nodes = {},
+  85	        activeNodeIndex = 1,
+  85	        currentNodeIndex = 0,
+  85	        assert = testAssert,
+  85	        error = testError,
+ 170	    }, { __call = test })
     	end
     	
     	-- Run a node
     	local function runNode (node)
- 202	    node.currentNodeIndex = 0
- 202	    return node:process()
+ 210	    node.currentNodeIndex = 0
+ 210	    return node:process()
     	end
     	
     	-- Get the root node for a given node
     	local function getRootNode (node) 
- 177	    local parent = node.parent
- 177	    return parent and getRootNode(parent) or node
+ 189	    local parent = node.parent
+ 189	    return parent and getRootNode(parent) or node
     	end
     	
     	-- Update the active child node of the given node
     	local function updateActiveNode (node, description, process) 
- 119	    local activeNodeIndex = node.activeNodeIndex
- 119	    local nodes = node.nodes
- 119	    local activeNode = nodes[activeNodeIndex]
+ 125	    local activeNodeIndex = node.activeNodeIndex
+ 125	    local nodes = node.nodes
+ 125	    local activeNode = nodes[activeNodeIndex]
     	
- 119	    if not activeNode then
-  72	        activeNode = createNode(node, description, process)
-  72	        nodes[activeNodeIndex] = activeNode
+ 125	    if not activeNode then
+  74	        activeNode = createNode(node, description, process)
+  74	        nodes[activeNodeIndex] = activeNode
     	    else 
-  47	        activeNode.process = process
+  51	        activeNode.process = process
     	    end
     	    
- 119	    getRootNode(node).lastActiveLeaf = activeNode
+ 125	    getRootNode(node).lastActiveLeaf = activeNode
     	
- 119	    return activeNode
+ 125	    return activeNode
     	end
     	
     	-- Run the active child node of the given node
     	local function runActiveNode (node, description, process) 
- 119	    local activeNode = updateActiveNode(node, description, process)
- 119	    return runNode(activeNode)
+ 125	    local activeNode = updateActiveNode(node, description, process)
+ 125	    return runNode(activeNode)
     	end
     	
     	-- Get ancestors of a node, including the node
@@ -604,18 +617,18 @@
     	
     	-- Create a branch node for a test scenario
     	test = function (node, description, process) 
- 520	    node.currentNodeIndex = node.currentNodeIndex + 1
- 520	    if node.currentNodeIndex == node.activeNodeIndex then
- 119	        return runActiveNode(node, description, process) 
+ 544	    node.currentNodeIndex = node.currentNodeIndex + 1
+ 544	    if node.currentNodeIndex == node.activeNodeIndex then
+ 125	        return runActiveNode(node, description, process) 
     	    end
     	end
     	
     	-- Test an assertion
     	testAssert = function (self, value, description)
- 211	    if not value then
+ 214	    if not value then
    1	        return failAssert(self, description, 'Test failed: assertion failed')
     	    end
- 210	    return value
+ 213	    return value
     	end
     	
     	-- Expect function f to fail
@@ -630,10 +643,10 @@
   11	    local root = createNode(nil, description, process)
     	    
   11	    runNode(root)
-  83	    while root.activeNodeIndex <= #root.nodes do
-  72	        local lastActiveBranch = root.lastActiveLeaf.parent
-  72	        lastActiveBranch.activeNodeIndex = lastActiveBranch.activeNodeIndex + 1
-  72	        runNode(root)
+  85	    while root.activeNodeIndex <= #root.nodes do
+  74	        local lastActiveBranch = root.lastActiveLeaf.parent
+  74	        lastActiveBranch.activeNodeIndex = lastActiveBranch.activeNodeIndex + 1
+  74	        runNode(root)
     	    end
     	    
   11	    return root
@@ -1174,70 +1187,80 @@
 ./spec/event.lua
 ==============================================================================
    2	T('Given event module is loaded', function (T)
-  11	    local Event = require 'knife.event'
-  11	    Event.handlers = {}
-    	    
-  22	    T('When a handler is registered', function (T)
+  13	    local Event = require 'knife.event'
+  13	    Event.handlers = {}
+    	
+  26	    T('When a handler is registered', function (T)
     	        local eventArg
-  11	        local fooHandler = Event.on('foo', function (x) eventArg = x end)
-    	        
-  16	        T('When the event fires', function (T)
+  13	        local fooHandler = Event.on('foo', function (x) eventArg = x end)
+    	
+  20	        T('When the event fires', function (T)
    1	            assert(eventArg == nil)
    1	            Event.dispatch('foo', 123)
    1	            T:assert(eventArg == 123, 'Then the handler runs')
     	        end)
-    	        
-  16	        T('When the handler is removed and the event fires', function (T)
-   1	            fooHandler:remove()
-   1	            assert(eventArg == nil)
-   1	            Event.dispatch('foo', 123)
-   1	            T:assert(eventArg == nil, 'Then the handler does not run')
+    	
+  20	        T('When the handler is removed and the event fires', function (T)
+   2	            fooHandler:remove()
+   2	            assert(eventArg == nil)
+   2	            Event.dispatch('foo', 123)
+   2	            T:assert(eventArg == nil, 'Then the handler does not run')
+    	
+   4	            T('When the handler is removed again', function (T)
+   1	                fooHandler:remove()
+   1	                T:assert(true, 'Then no error occurs')
+    	            end)
     	        end)
-    	            
-  16	        T('When a second handler is registered', function (T)
+    	
+  20	        T('When a second handler is registered', function (T)
     	            local eventArg2
-   6	            local fooHandler2 = Event.on('foo', function (x) eventArg2 = x end)
-    	            
-   8	            T('When the event fires', function (T)
+   7	            local fooHandler2 = Event.on('foo', function (x) eventArg2 = x end)
+    	
+  10	            T('When the event fires', function (T)
    1	                assert(eventArg == nil and eventArg2 == nil)
    1	                Event.dispatch('foo', 123)
    1	                T:assert(eventArg == 123, 'Then the first handler runs')
    1	                T:assert(eventArg2 == 123, 'Then the second handler runs')
     	            end)
-    	            
-   8	            T('When the first handler is removed and the event fires', function (T)
+    	
+  10	            T('When the first handler is removed and the event fires', function (T)
    1	                fooHandler:remove()
    1	                assert(eventArg == nil and eventArg2 == nil)
    1	                Event.dispatch('foo', 123)
    1	                T:assert(eventArg == nil, 'Then the first handler does not run')
    1	                T:assert(eventArg2 == 123, 'Then the second handler runs')
     	            end)
-    	            
-   8	            T('When the second handler is removed and the event fires', function (T)
+    	
+  10	            T('When the second handler is removed and the event fires', function (T)
    1	                fooHandler2:remove()
    1	                assert(eventArg == nil and eventArg2 == nil)
    1	                Event.dispatch('foo', 123)
    1	                T:assert(eventArg == 123, 'Then the first handler runs')
    1	                T:assert(eventArg2 == nil, 'Then the second handler does not run')
     	            end)
-    	            
+    	
+  10	            T('When the handler is registered again', function (T)
+   1	                fooHandler2:register()
+   1	                T:assert(true, 'Then no error occurs')
+    	            end)
+    	
     	        end)
-    	        
-  16	        T('When a second handler returning false is registered', function (T)
+    	
+  20	        T('When a second handler returning false is registered', function (T)
     	            local eventArg2
-   2	            Event.on('foo', function (x) 
+   2	            Event.on('foo', function (x)
    1	                eventArg2 = x
-   1	                return false 
+   1	                return false
     	            end)
    1	            assert(eventArg == nil and eventArg2 == nil)
    1	            Event.dispatch('foo', 123)
    1	            T:assert(eventArg == nil, 'Then the first handler does not run')
    1	            T:assert(eventArg2 == 123, 'Then the second handler runs')
     	        end)
-    	        
+    	
     	    end)
-    	    
-  22	    T('When dispatchers are injected into a table', function (T)
+    	
+  26	    T('When dispatchers are injected into a table', function (T)
    1	        local t = { bar = true }
     	        local eventArg
    1	        Event.injectDispatchers(t)
@@ -1246,8 +1269,8 @@
    1	        t.bar(123)
    1	        T:assert(eventArg == 123, 'Then members of the table dispatch events')
     	    end)
-    	    
-  22	    T('When dispatchers are injected into a table by key', function (T)
+    	
+  26	    T('When dispatchers are injected into a table by key', function (T)
    1	        local t = {}
     	        local eventArg
    1	        Event.injectDispatchers(t, { 'baz' })
@@ -1256,7 +1279,7 @@
    1	        t.baz(123)
    1	        T:assert(eventArg == 123, 'Then members of the table dispatch events')
     	    end)
-    	    
+    	
     	end)
 
 ==============================================================================
@@ -1792,7 +1815,7 @@ Summary
 40	0	100.00%	./knife/behavior.lua
 11	0	100.00%	./knife/chain.lua
 25	0	100.00%	./knife/convoke.lua
-36	0	100.00%	./knife/event.lua
+45	0	100.00%	./knife/event.lua
 43	0	100.00%	./knife/memoize.lua
 78	0	100.00%	./knife/system.lua
 62	0	100.00%	./knife/test.lua
@@ -1801,10 +1824,10 @@ Summary
 43	0	100.00%	./spec/behavior.lua
 19	0	100.00%	./spec/chain.lua
 60	0	100.00%	./spec/convoke.lua
-55	0	100.00%	./spec/event.lua
+61	0	100.00%	./spec/event.lua
 111	0	100.00%	./spec/memoize.lua
 74	0	100.00%	./spec/system.lua
 42	0	100.00%	./spec/test.lua
 75	0	100.00%	./spec/timer.lua
 ------------------------
-942	0	100.00%	
+957	0	100.00%	
