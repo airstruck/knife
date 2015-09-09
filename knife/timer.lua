@@ -21,6 +21,7 @@ local function attach (group, item)
     item.index = index
     group[index] = item
     item.groupField = group
+    item.lastGroup = group
 end
 
 -- instance update methods
@@ -117,6 +118,12 @@ local function remove (self)
     return self
 end
 
+local function register (self)
+    attach(self.lastGroup, self)
+
+    return self
+end
+
 local function limit (self, limitField)
     self.limitField = limitField
 
@@ -167,6 +174,7 @@ local function initialize (timer)
     timer.elapsed = 0
     timer.group = group
     timer.remove = remove
+    timer.register = register
 
     attach(defaultGroup, timer)
 

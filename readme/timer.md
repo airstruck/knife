@@ -271,6 +271,18 @@ local function defuse ()
 end
 ```
 
+## timer:register ()
+
+Registers a previously removed timer.
+
+Applies to all timers.
+
+### Example
+
+```lua
+ticker:register()
+```
+
 ## Caveats/features
 
 - In the interest of performance, simultaneously applying multiple tweens

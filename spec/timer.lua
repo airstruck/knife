@@ -94,6 +94,14 @@ T('Given Timer, a target object, and an update function', function (T)
             update(0.1, group)
             T:assert(target.x == 102 and target.y == 204,
             'Then the target values are not interpolated')
+
+            T('When the tween is registered and update is called', function (T)
+                tween:register()
+                update(0.1, group)
+                T:assert(target.x == 103 and target.y == 206,
+                'Then the target values are interpolated')
+            end)
+            
         end)
 
         T('When the tween is updated by a large amount', function (T)
