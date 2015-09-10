@@ -557,13 +557,13 @@
     	end
     	
     	-- Get the root node for a given node
-    	local function getRootNode (node) 
+    	local function getRootNode (node)
  195	    local parent = node.parent
  195	    return parent and getRootNode(parent) or node
     	end
     	
     	-- Update the active child node of the given node
-    	local function updateActiveNode (node, description, process) 
+    	local function updateActiveNode (node, description, process)
  128	    local activeNodeIndex = node.activeNodeIndex
  128	    local nodes = node.nodes
  128	    local activeNode = nodes[activeNodeIndex]
@@ -571,23 +571,23 @@
  128	    if not activeNode then
   75	        activeNode = createNode(node, description, process)
   75	        nodes[activeNodeIndex] = activeNode
-    	    else 
+    	    else
   53	        activeNode.process = process
     	    end
-    	    
+    	
  128	    getRootNode(node).lastActiveLeaf = activeNode
     	
  128	    return activeNode
     	end
     	
     	-- Run the active child node of the given node
-    	local function runActiveNode (node, description, process) 
+    	local function runActiveNode (node, description, process)
  128	    local activeNode = updateActiveNode(node, description, process)
  128	    return runNode(activeNode)
     	end
     	
     	-- Get ancestors of a node, including the node
-   1	function getAncestors (node)
+    	local function getAncestors (node)
    2	    local ancestors = { node }
   14	    for ancestor in function () return node.parent end do
    5	        ancestors[#ancestors + 1] = ancestor
@@ -597,7 +597,7 @@
     	end
     	
     	-- Print a message describing one execution path in the test scenario
-    	local function printScenario (node) 
+    	local function printScenario (node)
    2	    local ancestors = getAncestors(node)
    9	    for i = #ancestors, 1, -1 do
    7	        io.stderr:write(ancestors[i].description or '')
@@ -616,10 +616,10 @@
     	end
     	
     	-- Create a branch node for a test scenario
-    	test = function (node, description, process) 
+    	test = function (node, description, process)
  553	    node.currentNodeIndex = node.currentNodeIndex + 1
  553	    if node.currentNodeIndex == node.activeNodeIndex then
- 128	        return runActiveNode(node, description, process) 
+ 128	        return runActiveNode(node, description, process)
     	    end
     	end
     	
@@ -641,14 +641,14 @@
     	-- Create the root node for a test scenario
     	local function T (description, process)
   11	    local root = createNode(nil, description, process)
-    	    
+    	
   11	    runNode(root)
   86	    while root.activeNodeIndex <= #root.nodes do
   75	        local lastActiveBranch = root.lastActiveLeaf.parent
   75	        lastActiveBranch.activeNodeIndex = lastActiveBranch.activeNodeIndex + 1
   75	        runNode(root)
     	    end
-    	    
+    	
   11	    return root
     	end
     	
@@ -662,7 +662,6 @@
     	end
     	
    1	return T
-    	
 
 ==============================================================================
 ./knife/timer.lua
@@ -1834,7 +1833,7 @@ Summary
 45	0	100.00%	./knife/event.lua
 43	0	100.00%	./knife/memoize.lua
 78	0	100.00%	./knife/system.lua
-62	0	100.00%	./knife/test.lua
+61	0	100.00%	./knife/test.lua
 125	0	100.00%	./knife/timer.lua
 39	0	100.00%	./spec/base.lua
 43	0	100.00%	./spec/behavior.lua
@@ -1846,4 +1845,4 @@ Summary
 42	0	100.00%	./spec/test.lua
 80	0	100.00%	./spec/timer.lua
 ------------------------
-966	0	100.00%	
+965	0	100.00%	
