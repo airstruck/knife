@@ -76,7 +76,7 @@ local function failAssert (node, description, message)
     printScenario(node)
     io.stderr:write(description or '')
     io.stderr:write('\n\n')
-    error(message or '')
+    error(message or '', 2)
 end
 
 -- Create a branch node for a test scenario
@@ -117,7 +117,7 @@ local function T (description, process)
 end
 
 -- Run any other files passed from CLI.
-if arg and arg[0]:gmatch('test.lua') then
+if arg and arg[0] and arg[0]:gmatch('test.lua') then
     _G.T = T
     for i = 1, #arg do
         dofile(arg[i])
