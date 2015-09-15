@@ -6,6 +6,7 @@ A collection of useful micro-modules for Lua.
 
  * [knife.base](readme/base.md) - A base class for class-based OOP.
  * [knife.behavior](readme/behavior.md) - A state machine manager.
+ * [knife.bind](readme/bind.md) - Bind arguments to functions.
  * [knife.chain](readme/chain.md) - Flatten async code with chained functions.
  * [knife.convoke](readme/convoke.md) - Flatten async code with coroutines.
  * [knife.event](readme/event.md) - Dispatch and handle events.
