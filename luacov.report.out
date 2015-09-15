@@ -99,6 +99,37 @@
     	end
 
 ==============================================================================
+./knife/bind.lua
+==============================================================================
+   1	local loadstring = _G.loadstring or _G.load
+   1	local tconcat = table.concat
+    	
+   1	local helperCache = {}
+    	
+    	local function buildHelper (argCount)
+   3	    if helperCache[argCount] then
+   1	        return helperCache[argCount]
+    	    end
+   2	    local argList1 = { 'f' }
+   2	    local argList2 = {}
+   4	    for index = 1, argCount do
+   2	        argList1[index + 1] = 'a' .. index
+   2	        argList2[index] = 'a' .. index
+    	    end
+   2	    argList2[argCount + 1] = '...'
+   2	    local source = 'return function(' .. tconcat(argList1, ', ') ..
+   2	        ') return function(...) return f(' .. tconcat(argList2, ', ') ..
+   2	        ') end end'
+   2	    local helper = loadstring(source)()
+   2	    helperCache[argCount] = helper
+   2	    return helper
+    	end
+    	
+    	return function (func, ...)
+   3	    return buildHelper(select('#', ...))(func, ...)
+    	end
+
+==============================================================================
 ./knife/chain.lua
 ==============================================================================
     	local function getNextLink (callbacks)
@@ -538,52 +569,52 @@
     	
     	-- Create a node representing a test section
     	local function createNode (parent, description, process)
- 172	    return setmetatable({
-  86	        parent = parent,
-  86	        description = description,
-  86	        process = process,
-  86	        nodes = {},
-  86	        activeNodeIndex = 1,
-  86	        currentNodeIndex = 0,
-  86	        assert = testAssert,
-  86	        error = testError,
- 172	    }, { __call = test })
+ 180	    return setmetatable({
+  90	        parent = parent,
+  90	        description = description,
+  90	        process = process,
+  90	        nodes = {},
+  90	        activeNodeIndex = 1,
+  90	        currentNodeIndex = 0,
+  90	        assert = testAssert,
+  90	        error = testError,
+ 180	    }, { __call = test })
     	end
     	
     	-- Run a node
     	local function runNode (node)
- 214	    node.currentNodeIndex = 0
- 214	    return node:process()
+ 221	    node.currentNodeIndex = 0
+ 221	    return node:process()
     	end
     	
     	-- Get the root node for a given node
     	local function getRootNode (node)
- 195	    local parent = node.parent
- 195	    return parent and getRootNode(parent) or node
+ 198	    local parent = node.parent
+ 198	    return parent and getRootNode(parent) or node
     	end
     	
     	-- Update the active child node of the given node
     	local function updateActiveNode (node, description, process)
- 128	    local activeNodeIndex = node.activeNodeIndex
- 128	    local nodes = node.nodes
- 128	    local activeNode = nodes[activeNodeIndex]
+ 131	    local activeNodeIndex = node.activeNodeIndex
+ 131	    local nodes = node.nodes
+ 131	    local activeNode = nodes[activeNodeIndex]
     	
- 128	    if not activeNode then
-  75	        activeNode = createNode(node, description, process)
-  75	        nodes[activeNodeIndex] = activeNode
+ 131	    if not activeNode then
+  78	        activeNode = createNode(node, description, process)
+  78	        nodes[activeNodeIndex] = activeNode
     	    else
   53	        activeNode.process = process
     	    end
     	
- 128	    getRootNode(node).lastActiveLeaf = activeNode
+ 131	    getRootNode(node).lastActiveLeaf = activeNode
     	
- 128	    return activeNode
+ 131	    return activeNode
     	end
     	
     	-- Run the active child node of the given node
     	local function runActiveNode (node, description, process)
- 128	    local activeNode = updateActiveNode(node, description, process)
- 128	    return runNode(activeNode)
+ 131	    local activeNode = updateActiveNode(node, description, process)
+ 131	    return runNode(activeNode)
     	end
     	
     	-- Get ancestors of a node, including the node
@@ -612,23 +643,23 @@
    2	    printScenario(node)
    2	    io.stderr:write(description or '')
    2	    io.stderr:write('\n\n')
-   2	    error(message or '')
+   2	    error(message or '', 2)
     	end
     	
     	-- Create a branch node for a test scenario
     	test = function (node, description, process)
- 553	    node.currentNodeIndex = node.currentNodeIndex + 1
- 553	    if node.currentNodeIndex == node.activeNodeIndex then
- 128	        return runActiveNode(node, description, process)
+ 565	    node.currentNodeIndex = node.currentNodeIndex + 1
+ 565	    if node.currentNodeIndex == node.activeNodeIndex then
+ 131	        return runActiveNode(node, description, process)
     	    end
     	end
     	
     	-- Test an assertion
     	testAssert = function (self, value, description)
- 218	    if not value then
+ 221	    if not value then
    1	        return failAssert(self, description, 'Test failed: assertion failed')
     	    end
- 217	    return value
+ 220	    return value
     	end
     	
     	-- Expect function f to fail
@@ -640,23 +671,23 @@
     	
     	-- Create the root node for a test scenario
     	local function T (description, process)
-  11	    local root = createNode(nil, description, process)
+  12	    local root = createNode(nil, description, process)
     	
-  11	    runNode(root)
-  86	    while root.activeNodeIndex <= #root.nodes do
-  75	        local lastActiveBranch = root.lastActiveLeaf.parent
-  75	        lastActiveBranch.activeNodeIndex = lastActiveBranch.activeNodeIndex + 1
-  75	        runNode(root)
+  12	    runNode(root)
+  90	    while root.activeNodeIndex <= #root.nodes do
+  78	        local lastActiveBranch = root.lastActiveLeaf.parent
+  78	        lastActiveBranch.activeNodeIndex = lastActiveBranch.activeNodeIndex + 1
+  78	        runNode(root)
     	    end
     	
-  11	    return root
+  12	    return root
     	end
     	
     	-- Run any other files passed from CLI.
-   1	if arg and arg[0]:gmatch('test.lua') then
+   1	if arg and arg[0] and arg[0]:gmatch('test.lua') then
    1	    _G.T = T
-  10	    for i = 1, #arg do
-   9	        dofile(arg[i])
+  11	    for i = 1, #arg do
+  10	        dofile(arg[i])
     	    end
    1	    _G.T = nil
     	end
@@ -1042,6 +1073,46 @@
    1	            'Then the frame is set accordingly')
     	        end)
     	
+    	    end)
+    	
+    	end)
+
+==============================================================================
+./spec/bind.lua
+==============================================================================
+   2	T('Given a function to bind', function (T)
+    	
+   4	    local Bind = require 'knife.bind'
+    	
+    	    local a, b, c, d, e
+    	
+    	    local function doStuff (arg1, arg2, arg3, arg4)
+   3	        a, b, c, d = arg1, arg2, arg3, arg4
+   3	        e = 5
+    	    end
+    	
+   8	    T('When bound and executed', function (T)
+   1	        local bound = Bind(doStuff, 1, 2)
+   1	        assert(a == nil and b == nil and c == nil and d == nil)
+   1	        bound()
+   2	        T:assert(a == 1 and b == 2 and c == nil,
+   1	        'Then arguments were bound correctly')
+    	    end)
+    	
+   8	    T('When bound and executed with more args', function (T)
+   1	        local bound = Bind(doStuff, 1, 2)
+   1	        assert(a == nil and b == nil and c == nil and d == nil)
+   1	        bound(3, 4)
+   2	        T:assert(a == 1 and b == 2 and c == 3 and d == 4,
+   1	        'Then arguments were bound correctly')
+    	    end)
+    	
+   8	    T('When bound with no args and executed', function (T)
+   1	        local bound = Bind(doStuff)
+   1	        assert(e == nil)
+   1	        bound()
+   2	        T:assert(e == 5,
+   1	        'Then bound function works correctly')
     	    end)
     	
     	end)
@@ -1828,6 +1899,7 @@ Summary
 
 8	0	100.00%	./knife/base.lua
 40	0	100.00%	./knife/behavior.lua
+18	0	100.00%	./knife/bind.lua
 11	0	100.00%	./knife/chain.lua
 25	0	100.00%	./knife/convoke.lua
 45	0	100.00%	./knife/event.lua
@@ -1837,6 +1909,7 @@ Summary
 125	0	100.00%	./knife/timer.lua
 39	0	100.00%	./spec/base.lua
 43	0	100.00%	./spec/behavior.lua
+22	0	100.00%	./spec/bind.lua
 19	0	100.00%	./spec/chain.lua
 60	0	100.00%	./spec/convoke.lua
 61	0	100.00%	./spec/event.lua
@@ -1845,4 +1918,4 @@ Summary
 42	0	100.00%	./spec/test.lua
 80	0	100.00%	./spec/timer.lua
 ------------------------
-965	0	100.00%	
+1005	0	100.00%	
