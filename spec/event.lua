@@ -72,20 +72,32 @@ T('Given event module is loaded', function (T)
 
     end)
 
-    T('When dispatchers are injected into a table', function (T)
+    T('When dispatchers are hooked into a table', function (T)
         local t = { bar = true }
         local eventArg
-        Event.injectDispatchers(t)
+        Event.hook(t)
         Event.on('bar', function (x) eventArg = x end)
         assert(eventArg == nil)
         t.bar(123)
         T:assert(eventArg == 123, 'Then members of the table dispatch events')
     end)
 
-    T('When dispatchers are injected into a table by key', function (T)
+    T('When dispatchers are hooked into a table of functions', function (T)
+        local z = 1
+        local t = { bar = function (y) z = y end }
+        local eventArg
+        Event.hook(t)
+        Event.on('bar', function (x) eventArg = x end)
+        assert(eventArg == nil)
+        t.bar(123)
+        T:assert(z == 123, 'Then original function runs')
+        T:assert(eventArg == 123, 'Then members of the table dispatch events')
+    end)
+
+    T('When dispatchers are hooked into a table by key', function (T)
         local t = {}
         local eventArg
-        Event.injectDispatchers(t, { 'baz' })
+        Event.hook(t, { 'baz' })
         Event.on('baz', function (x) eventArg = x end)
         assert(eventArg == nil)
         t.baz(123)

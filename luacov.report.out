@@ -250,67 +250,81 @@
     	
     	-- Insert an event handler into the registry
     	local function register (self)
-  19	    if self.isRegistered then
+  20	    if self.isRegistered then
    1	        return self
     	    end
-  18	    self.nextHandler = Event.handlers[self.name]
-  18	    if self.nextHandler then
+  19	    self.nextHandler = Event.handlers[self.name]
+  19	    if self.nextHandler then
    6	        self.nextHandler.prevHandler = self
     	    end
-  18	    Event.handlers[self.name] = self
-  18	    self.isRegistered = true
+  19	    Event.handlers[self.name] = self
+  19	    self.isRegistered = true
     	
-  18	    return self
+  19	    return self
     	end
     	
     	-- Create an event handler
     	local function Handler (name, callback)
-  18	    return {
-  18	        name = name,
-  18	        callback = callback,
-  18	        isRegistered = false,
-  18	        remove = remove,
-  18	        register = register
-  18	    }
+  19	    return {
+  19	        name = name,
+  19	        callback = callback,
+  19	        isRegistered = false,
+  19	        remove = remove,
+  19	        register = register
+  19	    }
     	end
     	
     	
     	
     	-- Create and register a new event handler
    1	function Event.on (name, callback)
-  18	    return register(Handler(name, callback))
+  19	    return register(Handler(name, callback))
     	end
     	
     	-- Dispatch an event
    1	function Event.dispatch (name, ...)
-   9	    local handler = Event.handlers[name]
+  10	    local handler = Event.handlers[name]
     	
-  16	    while handler do
-   8	        if handler.callback(...) == false then
+  18	    while handler do
+   9	        if handler.callback(...) == false then
    1	            return handler
     	        end
-   7	        handler = handler.nextHandler
+   8	        handler = handler.nextHandler
     	    end
     	end
     	
+    	local function isCallable (value)
+   3	    return type(value) == 'function' or type(value) == 'table' and
+   3	        getmetatable(value) and getmetatable(value).__call
+    	end
+    	
     	-- Inject a dispatcher into a table.
-    	local function injectDispatcher (t, key)
-    	    t[key] = function (...)
-   2	        return Event.dispatch(key, ...)
+    	local function hookDispatcher (t, key)
+   3	    local original = t[key]
+    	
+   3	    if isCallable(original) then
+    	        t[key] = function (...)
+   1	            original(...)
+   1	            return Event.dispatch(key, ...)
+    	        end
+    	    else
+    	        t[key] = function (...)
+   2	            return Event.dispatch(key, ...)
+    	        end
     	    end
     	end
     	
     	-- Inject dispatchers into a table. Examples:
-    	-- Event.injectDispatchers(love.handlers)
-    	-- Event.injectDispatchers(love, { 'load', 'update', 'draw' })
-   1	function Event.injectDispatchers (t, keys)
-   2	    if keys then
+    	-- Event.hook(love.handlers)
+    	-- Event.hook(love, { 'load', 'update', 'draw' })
+   1	function Event.hook (t, keys)
+   3	    if keys then
    2	        for _, key in ipairs(keys) do
-   1	            injectDispatcher(t, key)
+   1	            hookDispatcher(t, key)
     	        end
     	    else
-   2	        for key in pairs(t) do
-   1	            injectDispatcher(t, key)
+   4	        for key in pairs(t) do
+   2	            hookDispatcher(t, key)
     	        end
     	    end
     	end
@@ -569,52 +583,52 @@
     	
     	-- Create a node representing a test section
     	local function createNode (parent, description, process)
- 180	    return setmetatable({
-  90	        parent = parent,
-  90	        description = description,
-  90	        process = process,
-  90	        nodes = {},
-  90	        activeNodeIndex = 1,
-  90	        currentNodeIndex = 0,
-  90	        assert = testAssert,
-  90	        error = testError,
- 180	    }, { __call = test })
+ 182	    return setmetatable({
+  91	        parent = parent,
+  91	        description = description,
+  91	        process = process,
+  91	        nodes = {},
+  91	        activeNodeIndex = 1,
+  91	        currentNodeIndex = 0,
+  91	        assert = testAssert,
+  91	        error = testError,
+ 182	    }, { __call = test })
     	end
     	
     	-- Run a node
     	local function runNode (node)
- 221	    node.currentNodeIndex = 0
- 221	    return node:process()
+ 223	    node.currentNodeIndex = 0
+ 223	    return node:process()
     	end
     	
     	-- Get the root node for a given node
     	local function getRootNode (node)
- 198	    local parent = node.parent
- 198	    return parent and getRootNode(parent) or node
+ 199	    local parent = node.parent
+ 199	    return parent and getRootNode(parent) or node
     	end
     	
     	-- Update the active child node of the given node
     	local function updateActiveNode (node, description, process)
- 131	    local activeNodeIndex = node.activeNodeIndex
- 131	    local nodes = node.nodes
- 131	    local activeNode = nodes[activeNodeIndex]
+ 132	    local activeNodeIndex = node.activeNodeIndex
+ 132	    local nodes = node.nodes
+ 132	    local activeNode = nodes[activeNodeIndex]
     	
- 131	    if not activeNode then
-  78	        activeNode = createNode(node, description, process)
-  78	        nodes[activeNodeIndex] = activeNode
+ 132	    if not activeNode then
+  79	        activeNode = createNode(node, description, process)
+  79	        nodes[activeNodeIndex] = activeNode
     	    else
   53	        activeNode.process = process
     	    end
     	
- 131	    getRootNode(node).lastActiveLeaf = activeNode
+ 132	    getRootNode(node).lastActiveLeaf = activeNode
     	
- 131	    return activeNode
+ 132	    return activeNode
     	end
     	
     	-- Run the active child node of the given node
     	local function runActiveNode (node, description, process)
- 131	    local activeNode = updateActiveNode(node, description, process)
- 131	    return runNode(activeNode)
+ 132	    local activeNode = updateActiveNode(node, description, process)
+ 132	    return runNode(activeNode)
     	end
     	
     	-- Get ancestors of a node, including the node
@@ -648,18 +662,18 @@
     	
     	-- Create a branch node for a test scenario
     	test = function (node, description, process)
- 565	    node.currentNodeIndex = node.currentNodeIndex + 1
- 565	    if node.currentNodeIndex == node.activeNodeIndex then
- 131	        return runActiveNode(node, description, process)
+ 582	    node.currentNodeIndex = node.currentNodeIndex + 1
+ 582	    if node.currentNodeIndex == node.activeNodeIndex then
+ 132	        return runActiveNode(node, description, process)
     	    end
     	end
     	
     	-- Test an assertion
     	testAssert = function (self, value, description)
- 221	    if not value then
+ 223	    if not value then
    1	        return failAssert(self, description, 'Test failed: assertion failed')
     	    end
- 220	    return value
+ 222	    return value
     	end
     	
     	-- Expect function f to fail
@@ -674,10 +688,10 @@
   12	    local root = createNode(nil, description, process)
     	
   12	    runNode(root)
-  90	    while root.activeNodeIndex <= #root.nodes do
-  78	        local lastActiveBranch = root.lastActiveLeaf.parent
-  78	        lastActiveBranch.activeNodeIndex = lastActiveBranch.activeNodeIndex + 1
-  78	        runNode(root)
+  91	    while root.activeNodeIndex <= #root.nodes do
+  79	        local lastActiveBranch = root.lastActiveLeaf.parent
+  79	        lastActiveBranch.activeNodeIndex = lastActiveBranch.activeNodeIndex + 1
+  79	        runNode(root)
     	    end
     	
   12	    return root
@@ -1265,10 +1279,10 @@
 ./spec/event.lua
 ==============================================================================
    2	T('Given event module is loaded', function (T)
-  13	    local Event = require 'knife.event'
-  13	    Event.handlers = {}
+  14	    local Event = require 'knife.event'
+  14	    Event.handlers = {}
     	
-  26	    T('When a handler is registered', function (T)
+  28	    T('When a handler is registered', function (T)
     	        local eventArg
   13	        local fooHandler = Event.on('foo', function (x) eventArg = x end)
     	
@@ -1338,20 +1352,32 @@
     	
     	    end)
     	
-  26	    T('When dispatchers are injected into a table', function (T)
+  28	    T('When dispatchers are hooked into a table', function (T)
    1	        local t = { bar = true }
     	        local eventArg
-   1	        Event.injectDispatchers(t)
+   1	        Event.hook(t)
    2	        Event.on('bar', function (x) eventArg = x end)
    1	        assert(eventArg == nil)
    1	        t.bar(123)
    1	        T:assert(eventArg == 123, 'Then members of the table dispatch events')
     	    end)
     	
-  26	    T('When dispatchers are injected into a table by key', function (T)
+  28	    T('When dispatchers are hooked into a table of functions', function (T)
+   1	        local z = 1
+   2	        local t = { bar = function (y) z = y end }
+    	        local eventArg
+   1	        Event.hook(t)
+   2	        Event.on('bar', function (x) eventArg = x end)
+   1	        assert(eventArg == nil)
+   1	        t.bar(123)
+   1	        T:assert(z == 123, 'Then original function runs')
+   1	        T:assert(eventArg == 123, 'Then members of the table dispatch events')
+    	    end)
+    	
+  28	    T('When dispatchers are hooked into a table by key', function (T)
    1	        local t = {}
     	        local eventArg
-   1	        Event.injectDispatchers(t, { 'baz' })
+   1	        Event.hook(t, { 'baz' })
    2	        Event.on('baz', function (x) eventArg = x end)
    1	        assert(eventArg == nil)
    1	        t.baz(123)
@@ -1902,7 +1928,7 @@ Summary
 18	0	100.00%	./knife/bind.lua
 11	0	100.00%	./knife/chain.lua
 25	0	100.00%	./knife/convoke.lua
-45	0	100.00%	./knife/event.lua
+51	0	100.00%	./knife/event.lua
 43	0	100.00%	./knife/memoize.lua
 78	0	100.00%	./knife/system.lua
 61	0	100.00%	./knife/test.lua
@@ -1912,10 +1938,10 @@ Summary
 22	0	100.00%	./spec/bind.lua
 19	0	100.00%	./spec/chain.lua
 60	0	100.00%	./spec/convoke.lua
-61	0	100.00%	./spec/event.lua
+70	0	100.00%	./spec/event.lua
 111	0	100.00%	./spec/memoize.lua
 74	0	100.00%	./spec/system.lua
 42	0	100.00%	./spec/test.lua
 80	0	100.00%	./spec/timer.lua
 ------------------------
-1005	0	100.00%	
+1020	0	100.00%	

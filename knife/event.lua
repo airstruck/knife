@@ -70,24 +70,38 @@ function Event.dispatch (name, ...)
     end
 end
 
+local function isCallable (value)
+    return type(value) == 'function' or type(value) == 'table' and
+        getmetatable(value) and getmetatable(value).__call
+end
+
 -- Inject a dispatcher into a table.
-local function injectDispatcher (t, key)
-    t[key] = function (...)
-        return Event.dispatch(key, ...)
+local function hookDispatcher (t, key)
+    local original = t[key]
+
+    if isCallable(original) then
+        t[key] = function (...)
+            original(...)
+            return Event.dispatch(key, ...)
+        end
+    else
+        t[key] = function (...)
+            return Event.dispatch(key, ...)
+        end
     end
 end
 
 -- Inject dispatchers into a table. Examples:
--- Event.injectDispatchers(love.handlers)
--- Event.injectDispatchers(love, { 'load', 'update', 'draw' })
-function Event.injectDispatchers (t, keys)
+-- Event.hook(love.handlers)
+-- Event.hook(love, { 'load', 'update', 'draw' })
+function Event.hook (t, keys)
     if keys then
         for _, key in ipairs(keys) do
-            injectDispatcher(t, key)
+            hookDispatcher(t, key)
         end
     else
         for key in pairs(t) do
-            injectDispatcher(t, key)
+            hookDispatcher(t, key)
         end
     end
 end

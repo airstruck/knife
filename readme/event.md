@@ -57,27 +57,27 @@ if entity.health <= 0 then
 end
 ```
 
-## Event.injectDispatchers (target [, keys])
+## Event.hook (target [, keys])
 
-Inject dispatchers into `target` table in fields with matching `keys`, or all
+Hook dispatchers into `target` table in fields with matching `keys`, or all
 fields if omitted.
 
 ### Parameters
 
 - *table* **target**
 
-  Table to inject dispatchers into.
+  Table to hook dispatchers into.
 
 - *table* **keys**
 
-  Optional array of keys identifying fields to inject dispatchers into.
+  Optional array of keys identifying fields to hook dispatchers into.
 
 ### Example
 
 ```lua
 -- Intercept Love events and callbacks.
-Event.injectDispatchers(love.handlers)
-Event.injectDispatchers(love, { 'load', 'update', 'draw' })
+Event.hook(love.handlers)
+Event.hook(love, { 'load', 'update', 'draw' })
 ```
 
 ## handler:remove ()
