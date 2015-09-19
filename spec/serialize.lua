@@ -39,7 +39,8 @@ T('Given serialized data', function (T)
         T:assert(d.huge == math.huge, 'Then infinity is stored correctly')
         T:assert(d.tiny == -math.huge, 'Then -infinity is stored correctly')
         T:assert(tostring(d.pnan) == 'nan', 'Then NaN is stored correctly')
-        T:assert(tostring(d.nnan) == '-nan', 'Then -NaN is stored correctly')
+        T:assert(tostring(d.nnan) == '-nan' or tostring(d.nnan) == 'nan',
+        'Then -NaN is stored correctly') -- luajit doesn't print -nan
     end)
 
 end)

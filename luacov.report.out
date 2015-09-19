@@ -1705,7 +1705,8 @@
    1	        T:assert(d.huge == math.huge, 'Then infinity is stored correctly')
    1	        T:assert(d.tiny == -math.huge, 'Then -infinity is stored correctly')
    1	        T:assert(tostring(d.pnan) == 'nan', 'Then NaN is stored correctly')
-   1	        T:assert(tostring(d.nnan) == '-nan', 'Then -NaN is stored correctly')
+   2	        T:assert(tostring(d.nnan) == '-nan' or tostring(d.nnan) == 'nan',
+   1	        'Then -NaN is stored correctly') -- luajit doesn't print -nan
     	    end)
     	
     	end)
@@ -2072,9 +2073,9 @@ Summary
 60	0	100.00%	./spec/convoke.lua
 70	0	100.00%	./spec/event.lua
 111	0	100.00%	./spec/memoize.lua
-32	0	100.00%	./spec/serialize.lua
+33	0	100.00%	./spec/serialize.lua
 74	0	100.00%	./spec/system.lua
 42	0	100.00%	./spec/test.lua
 80	0	100.00%	./spec/timer.lua
 ------------------------
-1089	0	100.00%	
+1090	0	100.00%	
