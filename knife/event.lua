@@ -71,7 +71,7 @@ function Event.dispatch (name, ...)
 end
 
 local function isCallable (value)
-    return type(value) == 'function' or type(value) == 'table' and
+    return type(value) == 'function' or
         getmetatable(value) and getmetatable(value).__call
 end
 
