@@ -11,6 +11,7 @@ A collection of useful micro-modules for Lua.
  * [knife.convoke](readme/convoke.md) - Flatten async code with coroutines.
  * [knife.event](readme/event.md) - Dispatch and handle events.
  * [knife.memoize](readme/memoize.md) - A memoization function.
+ * [knife.serialize](readme/serialize.md) - Store data structures as strings.
  * [knife.system](readme/system.md) - An entity component system.
  * [knife.test](readme/test.md) - A fixture-free test framework.
  * [knife.timer](readme/timer.md) - Create timers and tweens.

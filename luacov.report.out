@@ -294,7 +294,7 @@
     	end
     	
     	local function isCallable (value)
-   3	    return type(value) == 'function' or type(value) == 'table' and
+   3	    return type(value) == 'function' or
    3	        getmetatable(value) and getmetatable(value).__call
     	end
     	
@@ -410,6 +410,88 @@
     	    end
     	
   34	    return run, cache, resultsKey, nilKey
+    	end
+
+==============================================================================
+./knife/serialize.lua
+==============================================================================
+   1	local tinsert, tconcat, infinity = table.insert, table.concat, math.huge
+    	
+    	return function (value)
+   2	    local intro, outro, ready, known = {}, {}, {}, {}
+   2	    local knownCount = 0
+   2	    local writer = {}
+    	
+    	    -- get writer delegate for this value's type
+    	    local function getWriter (value)
+  66	        return writer[type(value)]
+    	    end
+    	
+    	    -- check if a value has a representation yet
+    	    local function isReady (value)
+  58	        return type(value) ~= 'table' or ready[value]
+    	    end
+    	
+    	    -- serialize tables
+   2	    function writer.table (value)
+  10	        if known[value] then
+   4	            return known[value]
+    	        end
+    	
+   6	        knownCount = knownCount + 1
+   6	        local variable = ('v%i'):format(knownCount)
+   6	        known[value] = variable
+    	
+   6	        local parts = {}
+  38	        for k, v in pairs(value) do
+  32	            local writeKey, writeValue = getWriter(k), getWriter(v)
+  32	            if writeKey and writeValue then
+  30	                local key, value = writeKey(k), writeValue(v)
+  30	                if isReady(k) and isReady(v) then
+  26	                    tinsert(parts, ('[%s]=%s'):format(key, value))
+    	                else
+   4	                    tinsert(outro, ('%s[%s]=%s'):format(variable, key, value))
+    	                end
+    	            end
+    	        end
+    	
+   6	        local fields = tconcat(parts, ',')
+   6	        tinsert(intro, ('local %s={%s}'):format(variable, fields))
+   6	        ready[value] = true
+    	
+   6	        return variable
+    	    end
+    	
+    	    -- preserve sign bit on NaN, since Lua prints "nan" or "-nan"
+    	    local function writeNan (n)
+   4	        return tostring(n) == tostring(0/0) and '0/0' or '-(0/0)'
+    	    end
+    	
+    	    -- serialize numbers
+   2	    function writer.number (value)
+  26	        return value == infinity and '1/0'
+  26	            or value == -infinity and '-1/0'
+  24	            or value ~= value and writeNan(value)
+  26	            or ('%.17G'):format(value)
+    	    end
+    	
+    	    -- serialize strings
+   2	    function writer.string (value)
+  24	        return ('%q'):format(value)
+    	    end
+    	
+    	    -- serialize booleans
+   2	    writer.boolean = tostring
+    	
+    	    -- concatenate array, joined by and terminated with line break
+    	    local function lines (t)
+   4	        return #t == 0 and '' or tconcat(t, '\n') .. '\n'
+    	    end
+    	
+    	    -- generate serialized result
+   2	    local write = getWriter(value)
+   2	    local result = write and write(value) or 'nil'
+   2	    return lines(intro) .. lines(outro) .. 'return ' .. result
     	end
 
 ==============================================================================
@@ -583,52 +665,52 @@
     	
     	-- Create a node representing a test section
     	local function createNode (parent, description, process)
- 182	    return setmetatable({
-  91	        parent = parent,
-  91	        description = description,
-  91	        process = process,
-  91	        nodes = {},
-  91	        activeNodeIndex = 1,
-  91	        currentNodeIndex = 0,
-  91	        assert = testAssert,
-  91	        error = testError,
- 182	    }, { __call = test })
+ 186	    return setmetatable({
+  93	        parent = parent,
+  93	        description = description,
+  93	        process = process,
+  93	        nodes = {},
+  93	        activeNodeIndex = 1,
+  93	        currentNodeIndex = 0,
+  93	        assert = testAssert,
+  93	        error = testError,
+ 186	    }, { __call = test })
     	end
     	
     	-- Run a node
     	local function runNode (node)
- 223	    node.currentNodeIndex = 0
- 223	    return node:process()
+ 226	    node.currentNodeIndex = 0
+ 226	    return node:process()
     	end
     	
     	-- Get the root node for a given node
     	local function getRootNode (node)
- 199	    local parent = node.parent
- 199	    return parent and getRootNode(parent) or node
+ 200	    local parent = node.parent
+ 200	    return parent and getRootNode(parent) or node
     	end
     	
     	-- Update the active child node of the given node
     	local function updateActiveNode (node, description, process)
- 132	    local activeNodeIndex = node.activeNodeIndex
- 132	    local nodes = node.nodes
- 132	    local activeNode = nodes[activeNodeIndex]
+ 133	    local activeNodeIndex = node.activeNodeIndex
+ 133	    local nodes = node.nodes
+ 133	    local activeNode = nodes[activeNodeIndex]
     	
- 132	    if not activeNode then
-  79	        activeNode = createNode(node, description, process)
-  79	        nodes[activeNodeIndex] = activeNode
+ 133	    if not activeNode then
+  80	        activeNode = createNode(node, description, process)
+  80	        nodes[activeNodeIndex] = activeNode
     	    else
   53	        activeNode.process = process
     	    end
     	
- 132	    getRootNode(node).lastActiveLeaf = activeNode
+ 133	    getRootNode(node).lastActiveLeaf = activeNode
     	
- 132	    return activeNode
+ 133	    return activeNode
     	end
     	
     	-- Run the active child node of the given node
     	local function runActiveNode (node, description, process)
- 132	    local activeNode = updateActiveNode(node, description, process)
- 132	    return runNode(activeNode)
+ 133	    local activeNode = updateActiveNode(node, description, process)
+ 133	    return runNode(activeNode)
     	end
     	
     	-- Get ancestors of a node, including the node
@@ -662,18 +744,18 @@
     	
     	-- Create a branch node for a test scenario
     	test = function (node, description, process)
- 582	    node.currentNodeIndex = node.currentNodeIndex + 1
- 582	    if node.currentNodeIndex == node.activeNodeIndex then
- 132	        return runActiveNode(node, description, process)
+ 584	    node.currentNodeIndex = node.currentNodeIndex + 1
+ 584	    if node.currentNodeIndex == node.activeNodeIndex then
+ 133	        return runActiveNode(node, description, process)
     	    end
     	end
     	
     	-- Test an assertion
     	testAssert = function (self, value, description)
- 223	    if not value then
+ 235	    if not value then
    1	        return failAssert(self, description, 'Test failed: assertion failed')
     	    end
- 222	    return value
+ 234	    return value
     	end
     	
     	-- Expect function f to fail
@@ -685,23 +767,23 @@
     	
     	-- Create the root node for a test scenario
     	local function T (description, process)
-  12	    local root = createNode(nil, description, process)
+  13	    local root = createNode(nil, description, process)
     	
-  12	    runNode(root)
-  91	    while root.activeNodeIndex <= #root.nodes do
-  79	        local lastActiveBranch = root.lastActiveLeaf.parent
-  79	        lastActiveBranch.activeNodeIndex = lastActiveBranch.activeNodeIndex + 1
-  79	        runNode(root)
+  13	    runNode(root)
+  93	    while root.activeNodeIndex <= #root.nodes do
+  80	        local lastActiveBranch = root.lastActiveLeaf.parent
+  80	        lastActiveBranch.activeNodeIndex = lastActiveBranch.activeNodeIndex + 1
+  80	        runNode(root)
     	    end
     	
-  12	    return root
+  13	    return root
     	end
     	
     	-- Run any other files passed from CLI.
    1	if arg and arg[0] and arg[0]:gmatch('test.lua') then
    1	    _G.T = T
-  11	    for i = 1, #arg do
-  10	        dofile(arg[i])
+  12	    for i = 1, #arg do
+  11	        dofile(arg[i])
     	    end
    1	    _G.T = nil
     	end
@@ -1580,6 +1662,55 @@
     	
 
 ==============================================================================
+./spec/serialize.lua
+==============================================================================
+   1	local loadstring = _G.loadstring or _G.load
+    	
+   2	T('Given serialized data', function (T)
+   2	    local Serialize = require 'knife.serialize'
+    	
+   2	    local data = {
+   2	        a = 'a',
+   2	        b = 123,
+   2	        c = false,
+   2	        e = { a = 1 },
+   2	        f = function () end,
+   2	        g = { 3, 2, 1 },
+    	    }
+    	
+   2	    data.d = data
+   2	    data.e[data] = 2
+    	
+   2	    local nan = tostring(0/0) == 'nan' and 0/0 or -(0/0)
+    	
+   2	    data.huge = math.huge
+   2	    data.tiny = -math.huge
+   2	    data.pnan = nan
+   2	    data.nnan = -nan
+    	
+   2	    local serialized = Serialize(data)
+    	
+   4	    T('When the data is deserialized', function (T)
+   1	        local d = loadstring(serialized)()
+    	
+   1	        T:assert(d.a == 'a', 'Then strings are stored')
+   1	        T:assert(d.b == 123, 'Then numbers are stored')
+   1	        T:assert(d.c == false, 'Then booleans are stored')
+   1	        T:assert(d.d == d, 'Then circular references are stored')
+   1	        T:assert(d.e.a == 1, 'Then tables are stored')
+   1	        T:assert(d.e[d] == 2, 'Then circular reference keys are stored')
+   1	        T:assert(d.f == nil, 'Then functions are not stored')
+   1	        T:assert(table.concat(d.g) == '321', 'Then arrays are stored')
+    	
+   1	        T:assert(d.huge == math.huge, 'Then infinity is stored correctly')
+   1	        T:assert(d.tiny == -math.huge, 'Then -infinity is stored correctly')
+   1	        T:assert(tostring(d.pnan) == 'nan', 'Then NaN is stored correctly')
+   1	        T:assert(tostring(d.nnan) == '-nan', 'Then -NaN is stored correctly')
+    	    end)
+    	
+    	end)
+
+==============================================================================
 ./spec/system.lua
 ==============================================================================
    2	T('Given some systems and some entities',
@@ -1930,6 +2061,7 @@ Summary
 25	0	100.00%	./knife/convoke.lua
 51	0	100.00%	./knife/event.lua
 43	0	100.00%	./knife/memoize.lua
+37	0	100.00%	./knife/serialize.lua
 78	0	100.00%	./knife/system.lua
 61	0	100.00%	./knife/test.lua
 125	0	100.00%	./knife/timer.lua
@@ -1940,8 +2072,9 @@ Summary
 60	0	100.00%	./spec/convoke.lua
 70	0	100.00%	./spec/event.lua
 111	0	100.00%	./spec/memoize.lua
+32	0	100.00%	./spec/serialize.lua
 74	0	100.00%	./spec/system.lua
 42	0	100.00%	./spec/test.lua
 80	0	100.00%	./spec/timer.lua
 ------------------------
-1020	0	100.00%	
+1089	0	100.00%	
