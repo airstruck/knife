@@ -69,28 +69,13 @@ function (T)
         'Then the current entity is removed')
     end)
 
-    T('When a process returns a number',
-    function (T)
-
-        local testRemovalByIndex = System(
-        { 'position' },
-        function (pos)
-            return 1
-        end)
-
-        assert(#entities == 2)
-        testRemovalByIndex(entities)
-        T:assert(#entities == 1 and entities[1] == e2,
-        'Then the corresponding entity is removed')
-    end)
-
-    T('When a process returns a table',
+    T('When a process returns a table of entities to remove',
     function (T)
 
         local testRemovalByIndices = System(
-        { 'position' },
-        function (pos)
-            return { 1, 2 }
+        { 'position', '_entities' },
+        function (pos, e)
+            return { e[1], e[2] }
         end)
 
         assert(#entities == 2)
@@ -130,6 +115,82 @@ function (T)
         addStuff(entities)
         T:assert(entities[3] == e3,
         'Then the new entities are added')
+    end)
+
+    T('When an aspect has choices',
+    function (T)
+
+        local result
+
+        local s = System(
+        { 'position|velocity', 'position', 'velocity' },
+        function (pv, p, v)
+            result = pv == p
+        end)
+        s(entities)
+        T:assert(result, 'Then first available is chosen')
+
+        local s = System(
+        { 'velocity|position', 'position', 'velocity' },
+        function (pv, p, v)
+            result = pv == v
+        end)
+        s(entities)
+        T:assert(result, 'Then first available is chosen x2')
+
+    end)
+
+    T('When an aspect has reject sigil',
+    function (T)
+
+        local result
+
+        local s = System(
+        { '!velocity', 'position' },
+        function (p)
+            result = p.x
+        end)
+        s(entities)
+        T:assert(result == 10, 'Then matching entities are not processed')
+
+    end)
+
+    T('When an aspect has mute sigil',
+    function (T)
+
+        local result
+
+        local s = System(
+            { 'position', '-velocity', '_entity' },
+            function (p, e)
+                result = { p, e }
+            end)
+        s(entities)
+        T:assert(result[1] == e2.position and result[2] == e2,
+        'Then it is suppressed from the args list')
+
+    end)
+
+    T('When an aspect has option sigil',
+    function (T)
+
+        local result = {}
+
+        local s = System(
+            { 'position', '?velocity', '_entity' },
+            function (p, v, e)
+                result[#result + 1] = { p, v, e }
+            end)
+        s(entities)
+
+        T:assert(result[1][1] == e1.position
+            and result[1][2] == nil
+            and result[1][3] == e1
+            and result[2][1] == e2.position
+            and result[2][2] == e2.velocity
+            and result[2][3] == e2,
+            'Then it is optional')
+
     end)
 
 end)

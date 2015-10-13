@@ -5,16 +5,15 @@
    1	return {
     	    extend = function (self, subtype)
   36	        return setmetatable(subtype or {}, {
-  18	            __index = self, 
+  18	            __index = self,
     	            __call = function (self, ...)
-   8	                local instance = setmetatable({}, { __index = self }) 
+   8	                local instance = setmetatable({}, { __index = self })
    8	                return instance, instance:constructor(...)
-    	            end 
+    	            end
   18	        })
     	    end,
    5	    constructor = function () end,
    1	}
-    	
 
 ==============================================================================
 ./knife/behavior.lua
@@ -502,50 +501,37 @@
    1	local tconcat = table.concat
    1	local type = type
     	
-   1	local underscoreByteValue = ('_'):byte()
    1	local runningTraversals = 0
     	local removalList
     	local insertionList
     	
-    	local function hasInitialUnderscore (value)
-  48	    return type(value) == 'string' and value:byte() == underscoreByteValue
-    	end
-    	
-    	local function checkAspects (entity, aspects)
-  36	    for index = 1, #aspects do
-  23	        local aspect = aspects[index]
-  23	        if entity[aspect] == nil and not hasInitialUnderscore(aspect) then
-   4	            return false
-    	        end
+    	local function updateRemovalList (entities, value, entity)
+  25	    if not value then
+  21	        return
     	    end
-  13	    return true
-    	end
-    	
-    	local function updateRemovalList (list, value, entityIndex)
-  13	    if not value then
-   7	        return list
+   4	    if not removalList then
+   3	        removalList = { byIndex = {}, byEntities = {} }
     	    end
-   6	    if not list then
-   4	        list = {}
+   4	    local byIndex, byEntities = removalList.byIndex, removalList.byEntities
+   4	    local list = byEntities[entities]
+   4	    if not list then
+   3	        list = {}
+   3	        byEntities[entities] = list
+   3	        byIndex[#byIndex + 1] = entities
     	    end
     	
-   6	    local valueType = type(value)
+   4	    local valueType = type(value)
     	
-   6	    if valueType == 'boolean' then
-   1	        list[entityIndex] = true
-   1	        return list
-    	    end
-    	
-   5	    if valueType == 'number' then
-   2	        list[value] = true
-   2	        return list
+   4	    if valueType == 'boolean' then
+   1	        list[entity] = true
+   1	        return
     	    end
     	
    3	    if valueType == 'table' then
    6	        for i = 1, #value do
    4	            list[value[i]] = true
     	        end
-   2	        return list
+   2	        return
     	    end
     	
    1	    runningTraversals = 0
@@ -555,106 +541,131 @@
    1	    error 'system returned an invalid value'
     	end
     	
-    	local function updateInsertionList (list, value)
-  12	    if not value then
-  11	        return list
+    	local function updateInsertionList (entities, value)
+  24	    if not value then
+  23	        return
     	    end
-   1	    if not list then
-   1	        list = {}
+   1	    if not insertionList then
+   1	        insertionList = {}
     	    end
     	
-   1	    list[#list + 1] = value
-    	
-   1	    return list
+   1	    insertionList[#insertionList + 1] = { entities, value }
     	end
     	
-    	local function removeEntities (entities, removalList)
-   8	    if not removalList then
-   5	        return
+    	local function removeEntities ()
+  12	    if not removalList then
+  10	        return
     	    end
-    	
-   9	    for entityIndex = #entities, 1, -1 do
-   6	        if removalList[entityIndex] then
-   4	            tremove(entities, entityIndex)
+   2	    local byIndex, byEntities = removalList.byIndex, removalList.byEntities
+   4	    for entitiesIndex = 1, #byIndex do
+   2	        local entities = byIndex[entitiesIndex]
+   2	        local list = byEntities[entities]
+   6	        for index = #entities, 1, -1 do
+   4	            if list[entities[index]] then
+   3	                tremove(entities, index)
+    	            end
     	        end
     	    end
     	end
     	
-    	local function createEntities (entities, insertionList)
-   8	    if not insertionList then
-   7	        return
+    	local function createEntities ()
+  12	    if not insertionList then
+  11	        return
     	    end
-   1	    local entitiesIndex = #entities
-    	
-   2	    for groupIndex = 1, #insertionList do
-   1	        local group = insertionList[groupIndex]
+   2	    for itemIndex = 1, #insertionList do
+   1	        local item = insertionList[itemIndex]
+   1	        local entities, group = item[1], item[2]
    2	        for newEntityIndex = 1, #group do
-   1	            entitiesIndex = entitiesIndex + 1
-   1	            entities[entitiesIndex] = group[newEntityIndex]
+   1	            entities[#entities + 1] = group[newEntityIndex]
     	        end
     	    end
     	end
     	
     	local function traverse (entities, aspects, process, invoke, ...)
     	
-   9	    runningTraversals = runningTraversals + 1
+  13	    runningTraversals = runningTraversals + 1
     	
-  25	    for index = 1, #entities do
-  17	        local entity = entities[index]
-  17	        if not entity then
+  37	    for index = 1, #entities do
+  25	        local entity = entities[index]
+  25	        if not entity then
     	            break
     	        end
-  17	        if checkAspects(entity, aspects) then
-  26	            local removal, insertion = invoke(
-  13	                process, entity, entities, index, ...)
+  25	        local old, new = invoke(process, entity, entities, index, ...)
     	
-  13	            removalList = updateRemovalList(removalList, removal, index)
-  12	            insertionList = updateInsertionList(insertionList, insertion)
-    	        end
+  25	        updateRemovalList(entities, old, entity)
+  24	        updateInsertionList(entities, new)
     	    end
     	
-   8	    runningTraversals = runningTraversals - 1
+  12	    runningTraversals = runningTraversals - 1
     	
-   8	    if runningTraversals == 0 then
-   8	        removeEntities(entities, removalList)
-   8	        createEntities(entities, insertionList)
-   8	        removalList = nil
-   8	        insertionList = nil
+  12	    if runningTraversals == 0 then
+  12	        removeEntities()
+  12	        createEntities()
+  12	        removalList = nil
+  12	        insertionList = nil
     	    end
+    	end
+    	
+    	local function hasSigil (sigil, value)
+ 320	    return type(value) == 'string' and sigil:byte() == value:byte()
     	end
     	
     	local function generateProcessInvoker (aspects)
-  24	    local args = {}
+  34	    local args = {}
+  34	    local cond = {}
+  34	    local localIndex = 0
+  34	    local choicePattern = '([^|]+)'
     	
-  66	    for index = 1, #aspects do
-  42	        local aspect = aspects[index]
-  42	        if hasInitialUnderscore(aspect) then
-   1	            args[index] = aspect
+    	    local function suppress (aspect, condition)
+   2	        cond[#cond + 1] = 'if nil'
+   4	        for option in aspect:sub(2):gmatch(choicePattern) do
+   2	            cond[#cond + 1] = condition:format(option)
+    	        end
+   2	        cond[#cond + 1] = 'then return end'
+    	    end
+    	
+    	    local function supply (aspect, isOptional)
+  62	        localIndex = localIndex + 1
+  62	        cond[#cond + 1] = ('local l%d = nil'):format(localIndex)
+  62	        if isOptional then
+   1	            aspect = aspect:sub(2)
+    	        end
+ 126	        for option in aspect:gmatch(choicePattern) do
+  64	            cond[#cond + 1] = ('or _entity[%q]'):format(option)
+    	        end
+  62	        if not isOptional then
+  61	            cond[#cond + 1] = ('if not l%d then return end'):format(localIndex)
+    	        end
+  62	        args[#args + 1] = ('l%d'):format(localIndex)
+    	    end
+    	
+ 102	    for index = 1, #aspects do
+  68	        local aspect = aspects[index]
+  68	        if hasSigil('_', aspect) then
+   4	            args[#args + 1] = aspect
+  64	        elseif hasSigil('!', aspect) or hasSigil('~', aspect) then
+   1	            suppress(aspect, 'or _entity[%q]')
+  63	        elseif hasSigil('-', aspect) then
+   1	            suppress(aspect, 'or not _entity[%q]')
+  62	        elseif hasSigil('?', aspect) then
+   1	            supply(aspect, true)
     	        else
-  41	            args[index] = ('_entity[%q]'):format(aspect)
+  61	            supply(aspect, false)
     	        end
     	    end
     	
-    	    local source
-    	    local template = [[
-    	        return function (_process, _entity, _entities, _index, ...)
-    	            return _process(%s ...)
-    	        end
-  24	    ]]
+  68	    local source = ('%s %s return _process(%s ...) end'):format(
+  34	        'return function (_process, _entity, _entities, _index, ...)',
+  34	        tconcat(cond, ' '),
+  34	        args[1] and (tconcat(args, ', ') .. ', ') or '')
     	
-  24	    if args[1] then
-  23	        source = (template):format(tconcat(args, ', ') .. ', ')
-    	    else
-   1	        source = (template):format('')
-    	    end
-    	
-  24	    return loadstring(source)()
+  34	    return loadstring(source)()
     	end
     	
     	return function (aspects, process)
-  24	    local invoke = generateProcessInvoker(aspects)
+  34	    local invoke = generateProcessInvoker(aspects)
     	    return function (entities, ...)
-   9	        return traverse(entities, aspects, process, invoke, ...)
+  13	        return traverse(entities, aspects, process, invoke, ...)
     	    end
     	end
 
@@ -665,52 +676,52 @@
     	
     	-- Create a node representing a test section
     	local function createNode (parent, description, process)
- 186	    return setmetatable({
-  93	        parent = parent,
-  93	        description = description,
-  93	        process = process,
-  93	        nodes = {},
-  93	        activeNodeIndex = 1,
-  93	        currentNodeIndex = 0,
-  93	        assert = testAssert,
-  93	        error = testError,
- 186	    }, { __call = test })
+ 192	    return setmetatable({
+  96	        parent = parent,
+  96	        description = description,
+  96	        process = process,
+  96	        nodes = {},
+  96	        activeNodeIndex = 1,
+  96	        currentNodeIndex = 0,
+  96	        assert = testAssert,
+  96	        error = testError,
+ 192	    }, { __call = test })
     	end
     	
     	-- Run a node
     	local function runNode (node)
- 226	    node.currentNodeIndex = 0
- 226	    return node:process()
+ 232	    node.currentNodeIndex = 0
+ 232	    return node:process()
     	end
     	
     	-- Get the root node for a given node
     	local function getRootNode (node)
- 200	    local parent = node.parent
- 200	    return parent and getRootNode(parent) or node
+ 203	    local parent = node.parent
+ 203	    return parent and getRootNode(parent) or node
     	end
     	
     	-- Update the active child node of the given node
     	local function updateActiveNode (node, description, process)
- 133	    local activeNodeIndex = node.activeNodeIndex
- 133	    local nodes = node.nodes
- 133	    local activeNode = nodes[activeNodeIndex]
+ 136	    local activeNodeIndex = node.activeNodeIndex
+ 136	    local nodes = node.nodes
+ 136	    local activeNode = nodes[activeNodeIndex]
     	
- 133	    if not activeNode then
-  80	        activeNode = createNode(node, description, process)
-  80	        nodes[activeNodeIndex] = activeNode
+ 136	    if not activeNode then
+  83	        activeNode = createNode(node, description, process)
+  83	        nodes[activeNodeIndex] = activeNode
     	    else
   53	        activeNode.process = process
     	    end
     	
- 133	    getRootNode(node).lastActiveLeaf = activeNode
+ 136	    getRootNode(node).lastActiveLeaf = activeNode
     	
- 133	    return activeNode
+ 136	    return activeNode
     	end
     	
     	-- Run the active child node of the given node
     	local function runActiveNode (node, description, process)
- 133	    local activeNode = updateActiveNode(node, description, process)
- 133	    return runNode(activeNode)
+ 136	    local activeNode = updateActiveNode(node, description, process)
+ 136	    return runNode(activeNode)
     	end
     	
     	-- Get ancestors of a node, including the node
@@ -744,18 +755,18 @@
     	
     	-- Create a branch node for a test scenario
     	test = function (node, description, process)
- 584	    node.currentNodeIndex = node.currentNodeIndex + 1
- 584	    if node.currentNodeIndex == node.activeNodeIndex then
- 133	        return runActiveNode(node, description, process)
+ 644	    node.currentNodeIndex = node.currentNodeIndex + 1
+ 644	    if node.currentNodeIndex == node.activeNodeIndex then
+ 136	        return runActiveNode(node, description, process)
     	    end
     	end
     	
     	-- Test an assertion
     	testAssert = function (self, value, description)
- 235	    if not value then
+ 239	    if not value then
    1	        return failAssert(self, description, 'Test failed: assertion failed')
     	    end
- 234	    return value
+ 238	    return value
     	end
     	
     	-- Expect function f to fail
@@ -770,10 +781,10 @@
   13	    local root = createNode(nil, description, process)
     	
   13	    runNode(root)
-  93	    while root.activeNodeIndex <= #root.nodes do
-  80	        local lastActiveBranch = root.lastActiveLeaf.parent
-  80	        lastActiveBranch.activeNodeIndex = lastActiveBranch.activeNodeIndex + 1
-  80	        runNode(root)
+  96	    while root.activeNodeIndex <= #root.nodes do
+  83	        local lastActiveBranch = root.lastActiveLeaf.parent
+  83	        lastActiveBranch.activeNodeIndex = lastActiveBranch.activeNodeIndex + 1
+  83	        runNode(root)
     	    end
     	
   13	    return root
@@ -1716,41 +1727,41 @@
 ==============================================================================
    2	T('Given some systems and some entities',
     	function (T)
-   9	    local System = require 'knife.system'
+  12	    local System = require 'knife.system'
     	
-   9	    local e1 = {
-   9	        position = { x = 10, y = 20 },
+  12	    local e1 = {
+  12	        position = { x = 10, y = 20 },
     	    }
-   9	    local e2 = {
-   9	        position = { x = 30, y = 40 },
-   9	        velocity = { x = 1, y = 2 }
+  12	    local e2 = {
+  12	        position = { x = 30, y = 40 },
+  12	        velocity = { x = 1, y = 2 }
     	    }
     	
-  18	    local updatePosition = System(
-   9	    { 'position', 'velocity' },
+  24	    local updatePosition = System(
+  12	    { 'position', 'velocity' },
     	    function (pos, vel)
    2	        pos.x = pos.x + vel.x
    2	        pos.y = pos.y + vel.y
     	    end)
     	
-  18	    local updateBoundary = System(
-   9	    { 'position', 'velocity' },
+  24	    local updateBoundary = System(
+  12	    { 'position', 'velocity' },
     	    function (pos, vel)
    1	        if pos.y > 40 then
    1	            return true
     	        end
     	    end)
     	
-   9	    local entities = { e1, e2 }
+  12	    local entities = { e1, e2 }
     	
-  18	    T('When a system is invoked',
+  24	    T('When a system is invoked',
     	    function (T)
    1	        updatePosition(entities)
    2	        T:assert(entities[2].position.y == 42,
    1	        'Then the components of the entities are updated')
     	    end)
     	
-  18	    T('When a system with an empty aspects list is invoked',
+  24	    T('When a system with an empty aspects list is invoked',
     	    function (T)
    1	        local counter = 0
     	
@@ -1763,7 +1774,7 @@
    1	        'Then all entities are processed')
     	    end)
     	
-  18	    T('When a system references a pseudo-component',
+  24	    T('When a system references a pseudo-component',
     	    function (T)
    1	        local results = {}
    2	        local pseudo = System(
@@ -1776,7 +1787,7 @@
    1	        'Then the pseudo-component is available to the process')
     	    end)
     	
-  18	    T('When a process returns true',
+  24	    T('When a process returns true',
     	    function (T)
    1	        assert(#entities == 2)
    1	        updatePosition(entities)
@@ -1785,28 +1796,13 @@
    1	        'Then the current entity is removed')
     	    end)
     	
-  18	    T('When a process returns a number',
-    	    function (T)
-    	
-   2	        local testRemovalByIndex = System(
-   1	        { 'position' },
-    	        function (pos)
-   2	            return 1
-    	        end)
-    	
-   1	        assert(#entities == 2)
-   1	        testRemovalByIndex(entities)
-   2	        T:assert(#entities == 1 and entities[1] == e2,
-   1	        'Then the corresponding entity is removed')
-    	    end)
-    	
-  18	    T('When a process returns a table',
+  24	    T('When a process returns a table of entities to remove',
     	    function (T)
     	
    2	        local testRemovalByIndices = System(
-   1	        { 'position' },
-    	        function (pos)
-   2	            return { 1, 2 }
+   1	        { 'position', '_entities' },
+    	        function (pos, e)
+   2	            return { e[1], e[2] }
     	        end)
     	
    1	        assert(#entities == 2)
@@ -1815,7 +1811,7 @@
    1	        'Then the corresponding entities are removed')
     	    end)
     	
-  18	    T('When a process returns an invalid removal value',
+  24	    T('When a process returns an invalid removal value',
     	    function (T)
     	
    2	        local testRemovalError = System(
@@ -1828,7 +1824,7 @@
    1	        'Then an error is thrown')
     	    end)
     	
-  18	    T('When a process returns new entities',
+  24	    T('When a process returns new entities',
     	    function (T)
     	
    1	        local e3 = {
@@ -1846,6 +1842,82 @@
    1	        addStuff(entities)
    2	        T:assert(entities[3] == e3,
    1	        'Then the new entities are added')
+    	    end)
+    	
+  24	    T('When an aspect has choices',
+    	    function (T)
+    	
+    	        local result
+    	
+   2	        local s = System(
+   1	        { 'position|velocity', 'position', 'velocity' },
+    	        function (pv, p, v)
+   1	            result = pv == p
+    	        end)
+   1	        s(entities)
+   1	        T:assert(result, 'Then first available is chosen')
+    	
+   2	        local s = System(
+   1	        { 'velocity|position', 'position', 'velocity' },
+    	        function (pv, p, v)
+   1	            result = pv == v
+    	        end)
+   1	        s(entities)
+   1	        T:assert(result, 'Then first available is chosen x2')
+    	
+    	    end)
+    	
+  24	    T('When an aspect has reject sigil',
+    	    function (T)
+    	
+    	        local result
+    	
+   2	        local s = System(
+   1	        { '!velocity', 'position' },
+    	        function (p)
+   1	            result = p.x
+    	        end)
+   1	        s(entities)
+   1	        T:assert(result == 10, 'Then matching entities are not processed')
+    	
+    	    end)
+    	
+  24	    T('When an aspect has mute sigil',
+    	    function (T)
+    	
+    	        local result
+    	
+   2	        local s = System(
+   1	            { 'position', '-velocity', '_entity' },
+    	            function (p, e)
+   1	                result = { p, e }
+    	            end)
+   1	        s(entities)
+   2	        T:assert(result[1] == e2.position and result[2] == e2,
+   1	        'Then it is suppressed from the args list')
+    	
+    	    end)
+    	
+  24	    T('When an aspect has option sigil',
+    	    function (T)
+    	
+   1	        local result = {}
+    	
+   2	        local s = System(
+   1	            { 'position', '?velocity', '_entity' },
+    	            function (p, v, e)
+   2	                result[#result + 1] = { p, v, e }
+    	            end)
+   1	        s(entities)
+    	
+   2	        T:assert(result[1][1] == e1.position
+   1	            and result[1][2] == nil
+   1	            and result[1][3] == e1
+   1	            and result[2][1] == e2.position
+   1	            and result[2][2] == e2.velocity
+   1	            and result[2][3] == e2,
+   1	            'Then it is optional')
+    	
     	    end)
     	
     	end)
@@ -2063,7 +2135,7 @@ Summary
 51	0	100.00%	./knife/event.lua
 43	0	100.00%	./knife/memoize.lua
 37	0	100.00%	./knife/serialize.lua
-78	0	100.00%	./knife/system.lua
+97	0	100.00%	./knife/system.lua
 61	0	100.00%	./knife/test.lua
 125	0	100.00%	./knife/timer.lua
 39	0	100.00%	./spec/base.lua
@@ -2074,8 +2146,8 @@ Summary
 70	0	100.00%	./spec/event.lua
 111	0	100.00%	./spec/memoize.lua
 33	0	100.00%	./spec/serialize.lua
-74	0	100.00%	./spec/system.lua
+103	0	100.00%	./spec/system.lua
 42	0	100.00%	./spec/test.lua
 80	0	100.00%	./spec/timer.lua
 ------------------------
-1090	0	100.00%	
+1138	0	100.00%	

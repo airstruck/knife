@@ -3,50 +3,37 @@ local tremove = table.remove
 local tconcat = table.concat
 local type = type
 
-local underscoreByteValue = ('_'):byte()
 local runningTraversals = 0
 local removalList
 local insertionList
 
-local function hasInitialUnderscore (value)
-    return type(value) == 'string' and value:byte() == underscoreByteValue
-end
-
-local function checkAspects (entity, aspects)
-    for index = 1, #aspects do
-        local aspect = aspects[index]
-        if entity[aspect] == nil and not hasInitialUnderscore(aspect) then
-            return false
-        end
-    end
-    return true
-end
-
-local function updateRemovalList (list, value, entityIndex)
+local function updateRemovalList (entities, value, entity)
     if not value then
-        return list
+        return
     end
+    if not removalList then
+        removalList = { byIndex = {}, byEntities = {} }
+    end
+    local byIndex, byEntities = removalList.byIndex, removalList.byEntities
+    local list = byEntities[entities]
     if not list then
         list = {}
+        byEntities[entities] = list
+        byIndex[#byIndex + 1] = entities
     end
 
     local valueType = type(value)
 
     if valueType == 'boolean' then
-        list[entityIndex] = true
-        return list
-    end
-
-    if valueType == 'number' then
-        list[value] = true
-        return list
+        list[entity] = true
+        return
     end
 
     if valueType == 'table' then
         for i = 1, #value do
             list[value[i]] = true
         end
-        return list
+        return
     end
 
     runningTraversals = 0
@@ -56,42 +43,42 @@ local function updateRemovalList (list, value, entityIndex)
     error 'system returned an invalid value'
 end
 
-local function updateInsertionList (list, value)
+local function updateInsertionList (entities, value)
     if not value then
-        return list
+        return
     end
-    if not list then
-        list = {}
+    if not insertionList then
+        insertionList = {}
     end
 
-    list[#list + 1] = value
-
-    return list
+    insertionList[#insertionList + 1] = { entities, value }
 end
 
-local function removeEntities (entities, removalList)
+local function removeEntities ()
     if not removalList then
         return
     end
-
-    for entityIndex = #entities, 1, -1 do
-        if removalList[entityIndex] then
-            tremove(entities, entityIndex)
+    local byIndex, byEntities = removalList.byIndex, removalList.byEntities
+    for entitiesIndex = 1, #byIndex do
+        local entities = byIndex[entitiesIndex]
+        local list = byEntities[entities]
+        for index = #entities, 1, -1 do
+            if list[entities[index]] then
+                tremove(entities, index)
+            end
         end
     end
 end
 
-local function createEntities (entities, insertionList)
+local function createEntities ()
     if not insertionList then
         return
     end
-    local entitiesIndex = #entities
-
-    for groupIndex = 1, #insertionList do
-        local group = insertionList[groupIndex]
+    for itemIndex = 1, #insertionList do
+        local item = insertionList[itemIndex]
+        local entities, group = item[1], item[2]
         for newEntityIndex = 1, #group do
-            entitiesIndex = entitiesIndex + 1
-            entities[entitiesIndex] = group[newEntityIndex]
+            entities[#entities + 1] = group[newEntityIndex]
         end
     end
 end
@@ -105,49 +92,74 @@ local function traverse (entities, aspects, process, invoke, ...)
         if not entity then
             break
         end
-        if checkAspects(entity, aspects) then
-            local removal, insertion = invoke(
-                process, entity, entities, index, ...)
+        local old, new = invoke(process, entity, entities, index, ...)
 
-            removalList = updateRemovalList(removalList, removal, index)
-            insertionList = updateInsertionList(insertionList, insertion)
-        end
+        updateRemovalList(entities, old, entity)
+        updateInsertionList(entities, new)
     end
 
     runningTraversals = runningTraversals - 1
 
     if runningTraversals == 0 then
-        removeEntities(entities, removalList)
-        createEntities(entities, insertionList)
+        removeEntities()
+        createEntities()
         removalList = nil
         insertionList = nil
     end
 end
 
+local function hasSigil (sigil, value)
+    return type(value) == 'string' and sigil:byte() == value:byte()
+end
+
 local function generateProcessInvoker (aspects)
     local args = {}
+    local cond = {}
+    local localIndex = 0
+    local choicePattern = '([^|]+)'
+
+    local function suppress (aspect, condition)
+        cond[#cond + 1] = 'if nil'
+        for option in aspect:sub(2):gmatch(choicePattern) do
+            cond[#cond + 1] = condition:format(option)
+        end
+        cond[#cond + 1] = 'then return end'
+    end
+
+    local function supply (aspect, isOptional)
+        localIndex = localIndex + 1
+        cond[#cond + 1] = ('local l%d = nil'):format(localIndex)
+        if isOptional then
+            aspect = aspect:sub(2)
+        end
+        for option in aspect:gmatch(choicePattern) do
+            cond[#cond + 1] = ('or _entity[%q]'):format(option)
+        end
+        if not isOptional then
+            cond[#cond + 1] = ('if not l%d then return end'):format(localIndex)
+        end
+        args[#args + 1] = ('l%d'):format(localIndex)
+    end
 
     for index = 1, #aspects do
         local aspect = aspects[index]
-        if hasInitialUnderscore(aspect) then
-            args[index] = aspect
+        if hasSigil('_', aspect) then
+            args[#args + 1] = aspect
+        elseif hasSigil('!', aspect) or hasSigil('~', aspect) then
+            suppress(aspect, 'or _entity[%q]')
+        elseif hasSigil('-', aspect) then
+            suppress(aspect, 'or not _entity[%q]')
+        elseif hasSigil('?', aspect) then
+            supply(aspect, true)
         else
-            args[index] = ('_entity[%q]'):format(aspect)
+            supply(aspect, false)
         end
     end
 
-    local source
-    local template = [[
-        return function (_process, _entity, _entities, _index, ...)
-            return _process(%s ...)
-        end
-    ]]
-
-    if args[1] then
-        source = (template):format(tconcat(args, ', ') .. ', ')
-    else
-        source = (template):format('')
-    end
+    local source = ('%s %s return _process(%s ...) end'):format(
+        'return function (_process, _entity, _entities, _index, ...)',
+        tconcat(cond, ' '),
+        args[1] and (tconcat(args, ', ') .. ', ') or '')
 
     return loadstring(source)()
 end

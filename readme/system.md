@@ -14,11 +14,11 @@ Define a system.
 
 ```lua
 local updateMotion = System(
-{ 'position', 'velocity' },
-function (p, v, dt)
-    p.x = p.x + v.x * dt
-    p.y = p.y + v.y * dt
-end)
+    { 'position', 'velocity' },
+    function (p, v, dt)
+        p.x = p.x + v.x * dt
+        p.y = p.y + v.y * dt
+    end)
 ```
 
 Invoke a system. Pass in an entities list, followed by any optional arguments.
@@ -33,11 +33,13 @@ end
 
 The API consists of a single function named `System`.
 
-    System(aspects, process) -> function (entities, ...)
+### System(aspects, process) -> function (entities, ...)
 
 - `aspects`: A list of keys which must be present in entities in order to
   process them. For each "aspect", the `process` function will receive one
   argument containing the matching component.
+
+  **pseudo-components**
 
   In addition to component keys, `aspects` may also contain some special
   "pseudo-component" keys. The following pseudo-components are provided:
@@ -45,6 +47,32 @@ The API consists of a single function named `System`.
   - `_entity`: The entity containing the components being processed.
   - `_entities`: The entities list being processed.
   - `_index`: The index of the current entity within the entities list.
+
+  **choices**
+
+  An aspect may contain several component keys delimited by pipe characters,
+  for example:
+
+  `name|label|title`
+
+  These aspects will resolve to the first component found. If none of the
+  components are found, the entity will not be processed.
+
+  **sigils**
+
+  An aspect may begin with the special characters `?`, `-` or `!`.
+
+  If the aspect begins with `?`, it is optional, and will not prevent the
+  entity from being processed even if no matching components are found.
+
+  If an aspect begins with `-`, the component is suppressed from the arguments
+  list passed to the process function. This is useful for components that only
+  help determine whether to process an entity, but the value of the component
+  is not needed within the process function.
+
+  If the aspect begins with `!`, all keys listed in the aspect must not be
+  present in an entity in order to process it. These aspects have no effect
+  on the arguments list.
 
 - `process`: A function that will process components. It should take one
   parameter for each value in the `aspects` list, plus any number of additional
@@ -56,12 +84,13 @@ The API consists of a single function named `System`.
   new entities to append to the list.
 
   If the first return value is `true`, the entity being processed will be
-  removed from the entities list. If it is a number, the entity at the
-  corresponding index will be removed. If it is a table of numbers, all entities
-  at the corresponding indices will be removed.
+  removed from the entities list. If it is a table of entities, all entities
+  in the table will be removed.
 
   The second return value, if present, should be a table of entities to append
   to the entities list.
+  
+  Entities will be removed and appended as soon as no systems are running.
 
 The `System` factory function returns a function representing your system.
 Call this returned function as needed; for example, in your update or draw
