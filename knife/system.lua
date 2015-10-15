@@ -68,6 +68,7 @@ local function removeEntities ()
             end
         end
     end
+    removalList = nil
 end
 
 local function createEntities ()
@@ -81,10 +82,10 @@ local function createEntities ()
             entities[#entities + 1] = group[newEntityIndex]
         end
     end
+    insertionList = nil
 end
 
 local function traverse (entities, aspects, process, invoke, ...)
-
     runningTraversals = runningTraversals + 1
 
     for index = 1, #entities do
@@ -103,8 +104,6 @@ local function traverse (entities, aspects, process, invoke, ...)
     if runningTraversals == 0 then
         removeEntities()
         createEntities()
-        removalList = nil
-        insertionList = nil
     end
 end
 
@@ -120,7 +119,7 @@ local function generateProcessInvoker (aspects)
 
     local function suppress (aspect, condition)
         cond[#cond + 1] = 'if nil'
-        for option in aspect:sub(2):gmatch(choicePattern) do
+        for option in aspect:gmatch(choicePattern) do
             cond[#cond + 1] = condition:format(option)
         end
         cond[#cond + 1] = 'then return end'
@@ -129,9 +128,6 @@ local function generateProcessInvoker (aspects)
     local function supply (aspect, isOptional)
         localIndex = localIndex + 1
         cond[#cond + 1] = ('local l%d = nil'):format(localIndex)
-        if isOptional then
-            aspect = aspect:sub(2)
-        end
         for option in aspect:gmatch(choicePattern) do
             cond[#cond + 1] = ('or _entity[%q]'):format(option)
         end
@@ -146,11 +142,11 @@ local function generateProcessInvoker (aspects)
         if hasSigil('_', aspect) then
             args[#args + 1] = aspect
         elseif hasSigil('!', aspect) or hasSigil('~', aspect) then
-            suppress(aspect, 'or _entity[%q]')
+            suppress(aspect:sub(2), 'or _entity[%q]')
         elseif hasSigil('-', aspect) then
-            suppress(aspect, 'or not _entity[%q]')
+            suppress(aspect:sub(2), 'or not _entity[%q]')
         elseif hasSigil('?', aspect) then
-            supply(aspect, true)
+            supply(aspect:sub(2), true)
         else
             supply(aspect, false)
         end

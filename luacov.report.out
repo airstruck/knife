@@ -566,6 +566,7 @@
     	            end
     	        end
     	    end
+   2	    removalList = nil
     	end
     	
     	local function createEntities ()
@@ -579,10 +580,10 @@
    1	            entities[#entities + 1] = group[newEntityIndex]
     	        end
     	    end
+   1	    insertionList = nil
     	end
     	
     	local function traverse (entities, aspects, process, invoke, ...)
-    	
   13	    runningTraversals = runningTraversals + 1
     	
   37	    for index = 1, #entities do
@@ -601,8 +602,6 @@
   12	    if runningTraversals == 0 then
   12	        removeEntities()
   12	        createEntities()
-  12	        removalList = nil
-  12	        insertionList = nil
     	    end
     	end
     	
@@ -618,7 +617,7 @@
     	
     	    local function suppress (aspect, condition)
    2	        cond[#cond + 1] = 'if nil'
-   4	        for option in aspect:sub(2):gmatch(choicePattern) do
+   4	        for option in aspect:gmatch(choicePattern) do
    2	            cond[#cond + 1] = condition:format(option)
     	        end
    2	        cond[#cond + 1] = 'then return end'
@@ -627,9 +626,6 @@
     	    local function supply (aspect, isOptional)
   62	        localIndex = localIndex + 1
   62	        cond[#cond + 1] = ('local l%d = nil'):format(localIndex)
-  62	        if isOptional then
-   1	            aspect = aspect:sub(2)
-    	        end
  126	        for option in aspect:gmatch(choicePattern) do
   64	            cond[#cond + 1] = ('or _entity[%q]'):format(option)
     	        end
@@ -644,11 +640,11 @@
   68	        if hasSigil('_', aspect) then
    4	            args[#args + 1] = aspect
   64	        elseif hasSigil('!', aspect) or hasSigil('~', aspect) then
-   1	            suppress(aspect, 'or _entity[%q]')
+   1	            suppress(aspect:sub(2), 'or _entity[%q]')
   63	        elseif hasSigil('-', aspect) then
-   1	            suppress(aspect, 'or not _entity[%q]')
+   1	            suppress(aspect:sub(2), 'or not _entity[%q]')
   62	        elseif hasSigil('?', aspect) then
-   1	            supply(aspect, true)
+   1	            supply(aspect:sub(2), true)
     	        else
   61	            supply(aspect, false)
     	        end
@@ -2135,7 +2131,7 @@ Summary
 51	0	100.00%	./knife/event.lua
 43	0	100.00%	./knife/memoize.lua
 37	0	100.00%	./knife/serialize.lua
-97	0	100.00%	./knife/system.lua
+95	0	100.00%	./knife/system.lua
 61	0	100.00%	./knife/test.lua
 125	0	100.00%	./knife/timer.lua
 39	0	100.00%	./spec/base.lua
@@ -2150,4 +2146,4 @@ Summary
 42	0	100.00%	./spec/test.lua
 80	0	100.00%	./spec/timer.lua
 ------------------------
-1138	0	100.00%	
+1136	0	100.00%	
