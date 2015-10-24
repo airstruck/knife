@@ -21,6 +21,15 @@ local updateMotion = System(
     end)
 ```
 
+Define some entities. Each entity is a table containing key/value pairs. An "entity list" is an array-like table containing entities.
+
+```lua
+local entities = {
+    { name = 'sam', position = { x = 10, y = 20 }, velocity = { x = -2, y = 4 } },
+    { name = 'max', position = { x = 42, y = 12 }, velocity = { x = 2, y = -4 } },
+}
+```
+
 Invoke a system. Pass in an entities list, followed by any optional arguments.
 
 ```lua
