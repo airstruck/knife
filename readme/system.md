@@ -10,7 +10,16 @@ Require the library.
 local System = require 'knife.system'
 ```
 
-Define a system.
+Define some entities. Each entity is a table of key/value pairs. Each value in an entity table is called a "component." An "entity list" is an array-like table containing entities.
+
+```lua
+local entities = {
+    { name = 'sam', position = { x = 10, y = 20 }, velocity = { x = -2, y = 4 } },
+    { name = 'max', position = { x = 42, y = 12 }, velocity = { x = 2, y = -4 } },
+}
+```
+
+Define a system. Systems iterate over an entity list, looking at each entity for relevant components and processing every matching entity. The following system will process any entity with "position" and "velocity" components, updating the position based on the velocity. 
 
 ```lua
 local updateMotion = System(
@@ -19,15 +28,6 @@ local updateMotion = System(
         p.x = p.x + v.x * dt
         p.y = p.y + v.y * dt
     end)
-```
-
-Define some entities. Each entity is a table containing key/value pairs. An "entity list" is an array-like table containing entities.
-
-```lua
-local entities = {
-    { name = 'sam', position = { x = 10, y = 20 }, velocity = { x = -2, y = 4 } },
-    { name = 'max', position = { x = 42, y = 12 }, velocity = { x = 2, y = -4 } },
-}
 ```
 
 Invoke a system. Pass in an entities list, followed by any optional arguments.
