@@ -4,16 +4,19 @@
 ==============================================================================
    1	return {
     	    extend = function (self, subtype)
-  36	        return setmetatable(subtype or {}, {
+  18	        subtype = subtype or {}
+  18	        local meta = { __index = subtype }
+  36	        return setmetatable(subtype, {
   18	            __index = self,
     	            __call = function (self, ...)
-   8	                local instance = setmetatable({}, { __index = self })
+   8	                local instance = setmetatable({}, meta)
    8	                return instance, instance:constructor(...)
     	            end
   18	        })
     	    end,
    5	    constructor = function () end,
    1	}
+    	
 
 ==============================================================================
 ./knife/behavior.lua
@@ -2123,7 +2126,7 @@
 Summary
 ==============================================================================
 
-8	0	100.00%	./knife/base.lua
+10	0	100.00%	./knife/base.lua
 40	0	100.00%	./knife/behavior.lua
 18	0	100.00%	./knife/bind.lua
 11	0	100.00%	./knife/chain.lua
@@ -2146,4 +2149,4 @@ Summary
 42	0	100.00%	./spec/test.lua
 80	0	100.00%	./spec/timer.lua
 ------------------------
-1136	0	100.00%	
+1138	0	100.00%	
