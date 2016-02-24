@@ -27,6 +27,24 @@ Now `savegame` holds a string containing a script that, when loaded with
 `loadstring`, or when saved to a file and loaded with `require` or `dofile`,
 will produce a table equivalent to the original `data` table.
 
+## Safe deserialization
+
+When deserializing data from an untrusted source, the deserialized function should be sandboxed before running it.
+
+```lua
+local data = setfenv(loadstring(serialized), {})()
+```
+
+## Binary serialization
+
+Under LuaJIT, `string.dump` can be used to produce binary output instead of text.
+
+```lua
+local serialized = string.dump(loadstring(Serialize(data)), true)
+```
+
+The binary output can be deserialized in exactly the same way as the normal textual output.
+
 ## Caveats/features
 
 - Supports data structures with circular references and self references.
