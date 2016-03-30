@@ -5,6 +5,32 @@ T('Given a function taking a callback', function (T)
     local function doStuff (a, b, callback)
         callback(a, b)
     end
+    
+    local invoke = {}
+    
+    local function funcThatReturnsChain (x)
+        local chain = Chain(function (go) go(x * 2) end)
+        invoke[#invoke + 1] = function () chain() end
+        return chain
+    end
+    
+    T('When a function that returns a chain is called', function (T)
+        funcThatReturnsChain(123)(function (go, x)
+            T:assert(x == 246, 'Then args are passed')
+            return funcThatReturnsChain(33)
+        end)(function (go, x)
+            T:assert(x == 66, 'Then more chains can be returned')
+            return funcThatReturnsChain(321)
+        end)(function (go, x)
+            T:assert(x == 642, 'Then more chains can be returned x2')
+            go(111)
+        end)(function (go, x)
+            T:assert(x == 111, 'Then continue function still works')
+        end)
+        for _, f in ipairs(invoke) do
+            f()
+        end
+    end)
 
     T('When Chain factory is called', function (T)
 

@@ -138,28 +138,32 @@
     	
     	    local function getCallbackInvoker (index)
     	        return function (...)
-   3	            local callback = callbacks[index]
-   3	            if not callback then
+  12	            local callback = callbacks[index]
+  12	            if not callback then
    1	                return
     	            end
-   2	            callback(getCallbackInvoker(index + 1), ...)
+  11	            local continue = getCallbackInvoker(index + 1)
+  11	            local returned = callback(continue, ...)
+  11	            if returned then
+   4	                returned(function (_, ...) continue(...) end)
+    	            end
     	        end
     	    end
     	
     	    local function nextLink (callback, ...)
-   3	        if not callback then
-   1	            return getCallbackInvoker(1)(...)
+  12	        if not callback then
+   4	            return getCallbackInvoker(1)(...)
     	        end
-   2	        callbacks[#callbacks + 1] = callback
-   2	        return nextLink
+   8	        callbacks[#callbacks + 1] = callback
+   8	        return nextLink
     	    end
     	
-   3	    return nextLink
+   6	    return nextLink
     	end
     	
     	return function (callback)
-   3	    local callbacks = { callback }
-   3	    return getNextLink(callbacks)
+   6	    local callbacks = { callback }
+   6	    return getNextLink(callbacks)
     	end
 
 ==============================================================================
@@ -675,52 +679,52 @@
     	
     	-- Create a node representing a test section
     	local function createNode (parent, description, process)
- 192	    return setmetatable({
-  96	        parent = parent,
-  96	        description = description,
-  96	        process = process,
-  96	        nodes = {},
-  96	        activeNodeIndex = 1,
-  96	        currentNodeIndex = 0,
-  96	        assert = testAssert,
-  96	        error = testError,
- 192	    }, { __call = test })
+ 194	    return setmetatable({
+  97	        parent = parent,
+  97	        description = description,
+  97	        process = process,
+  97	        nodes = {},
+  97	        activeNodeIndex = 1,
+  97	        currentNodeIndex = 0,
+  97	        assert = testAssert,
+  97	        error = testError,
+ 194	    }, { __call = test })
     	end
     	
     	-- Run a node
     	local function runNode (node)
- 232	    node.currentNodeIndex = 0
- 232	    return node:process()
+ 234	    node.currentNodeIndex = 0
+ 234	    return node:process()
     	end
     	
     	-- Get the root node for a given node
     	local function getRootNode (node)
- 203	    local parent = node.parent
- 203	    return parent and getRootNode(parent) or node
+ 204	    local parent = node.parent
+ 204	    return parent and getRootNode(parent) or node
     	end
     	
     	-- Update the active child node of the given node
     	local function updateActiveNode (node, description, process)
- 136	    local activeNodeIndex = node.activeNodeIndex
- 136	    local nodes = node.nodes
- 136	    local activeNode = nodes[activeNodeIndex]
+ 137	    local activeNodeIndex = node.activeNodeIndex
+ 137	    local nodes = node.nodes
+ 137	    local activeNode = nodes[activeNodeIndex]
     	
- 136	    if not activeNode then
-  83	        activeNode = createNode(node, description, process)
-  83	        nodes[activeNodeIndex] = activeNode
+ 137	    if not activeNode then
+  84	        activeNode = createNode(node, description, process)
+  84	        nodes[activeNodeIndex] = activeNode
     	    else
   53	        activeNode.process = process
     	    end
     	
- 136	    getRootNode(node).lastActiveLeaf = activeNode
+ 137	    getRootNode(node).lastActiveLeaf = activeNode
     	
- 136	    return activeNode
+ 137	    return activeNode
     	end
     	
     	-- Run the active child node of the given node
     	local function runActiveNode (node, description, process)
- 136	    local activeNode = updateActiveNode(node, description, process)
- 136	    return runNode(activeNode)
+ 137	    local activeNode = updateActiveNode(node, description, process)
+ 137	    return runNode(activeNode)
     	end
     	
     	-- Get ancestors of a node, including the node
@@ -754,18 +758,18 @@
     	
     	-- Create a branch node for a test scenario
     	test = function (node, description, process)
- 644	    node.currentNodeIndex = node.currentNodeIndex + 1
- 644	    if node.currentNodeIndex == node.activeNodeIndex then
- 136	        return runActiveNode(node, description, process)
+ 650	    node.currentNodeIndex = node.currentNodeIndex + 1
+ 650	    if node.currentNodeIndex == node.activeNodeIndex then
+ 137	        return runActiveNode(node, description, process)
     	    end
     	end
     	
     	-- Test an assertion
     	testAssert = function (self, value, description)
- 239	    if not value then
+ 243	    if not value then
    1	        return failAssert(self, description, 'Test failed: assertion failed')
     	    end
- 238	    return value
+ 242	    return value
     	end
     	
     	-- Expect function f to fail
@@ -780,10 +784,10 @@
   13	    local root = createNode(nil, description, process)
     	
   13	    runNode(root)
-  96	    while root.activeNodeIndex <= #root.nodes do
-  83	        local lastActiveBranch = root.lastActiveLeaf.parent
-  83	        lastActiveBranch.activeNodeIndex = lastActiveBranch.activeNodeIndex + 1
-  83	        runNode(root)
+  97	    while root.activeNodeIndex <= #root.nodes do
+  84	        local lastActiveBranch = root.lastActiveLeaf.parent
+  84	        lastActiveBranch.activeNodeIndex = lastActiveBranch.activeNodeIndex + 1
+  84	        runNode(root)
     	    end
     	
   13	    return root
@@ -1228,13 +1232,39 @@
 ==============================================================================
    2	T('Given a function taking a callback', function (T)
     	
-   4	    local Chain = require 'knife.chain'
+   5	    local Chain = require 'knife.chain'
     	
     	    local function doStuff (a, b, callback)
    1	        callback(a, b)
     	    end
+    	    
+   5	    local invoke = {}
+    	    
+    	    local function funcThatReturnsChain (x)
+   6	        local chain = Chain(function (go) go(x * 2) end)
+   6	        invoke[#invoke + 1] = function () chain() end
+   3	        return chain
+    	    end
+    	    
+  10	    T('When a function that returns a chain is called', function (T)
+   2	        funcThatReturnsChain(123)(function (go, x)
+   1	            T:assert(x == 246, 'Then args are passed')
+   1	            return funcThatReturnsChain(33)
+   2	        end)(function (go, x)
+   1	            T:assert(x == 66, 'Then more chains can be returned')
+   1	            return funcThatReturnsChain(321)
+   2	        end)(function (go, x)
+   1	            T:assert(x == 642, 'Then more chains can be returned x2')
+   1	            go(111)
+   3	        end)(function (go, x)
+   1	            T:assert(x == 111, 'Then continue function still works')
+    	        end)
+   4	        for _, f in ipairs(invoke) do
+   3	            f()
+    	        end
+    	    end)
     	
-   8	    T('When Chain factory is called', function (T)
+  10	    T('When Chain factory is called', function (T)
     	
    6	        local c1 = Chain(function (go)
    1	            doStuff(2, 3, go)
@@ -2129,7 +2159,7 @@ Summary
 10	0	100.00%	./knife/base.lua
 40	0	100.00%	./knife/behavior.lua
 18	0	100.00%	./knife/bind.lua
-11	0	100.00%	./knife/chain.lua
+14	0	100.00%	./knife/chain.lua
 25	0	100.00%	./knife/convoke.lua
 51	0	100.00%	./knife/event.lua
 43	0	100.00%	./knife/memoize.lua
@@ -2140,7 +2170,7 @@ Summary
 39	0	100.00%	./spec/base.lua
 43	0	100.00%	./spec/behavior.lua
 22	0	100.00%	./spec/bind.lua
-19	0	100.00%	./spec/chain.lua
+37	0	100.00%	./spec/chain.lua
 60	0	100.00%	./spec/convoke.lua
 70	0	100.00%	./spec/event.lua
 111	0	100.00%	./spec/memoize.lua
@@ -2149,4 +2179,4 @@ Summary
 42	0	100.00%	./spec/test.lua
 80	0	100.00%	./spec/timer.lua
 ------------------------
-1138	0	100.00%	
+1159	0	100.00%	

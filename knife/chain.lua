@@ -6,7 +6,11 @@ local function getNextLink (callbacks)
             if not callback then
                 return
             end
-            callback(getCallbackInvoker(index + 1), ...)
+            local continue = getCallbackInvoker(index + 1)
+            local returned = callback(continue, ...)
+            if returned then
+                returned(function (_, ...) continue(...) end)
+            end
         end
     end
 
