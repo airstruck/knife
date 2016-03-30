@@ -53,8 +53,8 @@ if [ "$LUAJIT" == "yes" ]; then
   make && make install PREFIX="$LUA_HOME_DIR"
 
   if [ "$LUA" == "luajit2.1" ]; then
-    ln -s $LUA_HOME_DIR/bin/luajit-2.1.0-beta1 $HOME/.lua/luajit
-    ln -s $LUA_HOME_DIR/bin/luajit-2.1.0-beta1 $HOME/.lua/lua;
+    ln -s $LUA_HOME_DIR/bin/luajit-2.1.0-beta2 $HOME/.lua/luajit
+    ln -s $LUA_HOME_DIR/bin/luajit-2.1.0-beta2 $HOME/.lua/lua;
   else
     ln -s $LUA_HOME_DIR/bin/luajit $HOME/.lua/luajit
     ln -s $LUA_HOME_DIR/bin/luajit $HOME/.lua/lua;
