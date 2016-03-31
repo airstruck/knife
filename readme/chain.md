@@ -23,20 +23,21 @@ Chain can be used to remedy that. The example above can be written like this:
 
 ```lua
 Chain(
-    function (continue)
+    function (go)
         print 'fading in'
-        Timer.after(1, continue)
+        Timer.after(1, go)
     end,
-    function (continue)
+    function (go)
         print 'showing splash screen'
-        Timer.after(1, continue)
+        Timer.after(1, go)
     end,
-    function (continue)
+    function (go)
         print 'showing title screen'
-        Timer.after(1, continue)
+        Timer.after(1, go)
     end,
-    function ()
+    function (go)
         print 'playing demo'
+        Timer.after(1, go)
     end
 )()
 ```
@@ -45,9 +46,9 @@ Chains can be condensed with small generator functions:
 
 ```lua
 local function TimedText (seconds, text)
-    return function (continue)
+    return function (go)
         print(text)
-        Timer.after(seconds, continue)
+        Timer.after(seconds, go)
     end
 end
 
@@ -61,28 +62,42 @@ Chain(
 
 ## API
 
-The `Chain` function takes zero or more **link** functions as its arguments,
-and returns a **chain** function, which can be used to add more links to the
-chain and to run the chain.
+### Chain factory
 
-The first argument passed to the **link** is a **continue** function. Call
+The `knife.chain` module returns a `Chain` factory function.
+
+The `Chain` factory takes zero or more **link** functions as its arguments,
+and returns a **chain instance** function, which can be used to add links
+to the chain or run the chain.
+
+### Link functions
+
+A **link** is a user-defined function passed into the `Chain` factory or a
+**chain instance**.
+
+The first argument passed to each **link** is a  function called **go**. Call
 this function to process the next link in the chain. Generally, this function
 should be passed into an asynchronous function as the callback, as in the
-examples above.
+examples above. Any arguments passed to this function will be passed along
+to the next link in the chain, after its **go** argument.
 
-A **link** may also return another **chain** instead of calling **continue**.
-In this case, the next link (if any) will be appended to the returned chain.
+The **link** may receive extra arguments after the **go** argument. The values
+of these arguments come from any arguments passed into the continue function
+from the previous link. The first link in the chain will receive any extra
+arguments passed after the initial `nil` when executing the chain.
+
+A **link** may return another **chain instance** instead of calling **go**.
+In this case, the next link (if any) will be appended to the returned instance.
 This allows for the creation of APIs with functions that return chains rather
-than accepting callbacks. If a **link** returns anything, it must be a **chain**.
+than accepting callbacks.
 
-The **chain** function returned from a call to `Chain` has nearly the same API
-as `Chain` itself, with two additional behaviors:
+If a **link** returns anything, it must be a **chain instance**.
 
-- The **callback** passed to chain functions may receive extra arguments
-  after the **continue** argument. The values of these arguments come from any
-  arguments passed into the continue function from the previous link.
+### Chain instance
 
-- Calling the chain function with no arguments or an initial `nil`
-  executes the entire chain. Any arguments after the initial `nil`
-  are passed into the first **link**, after the **continue** argument.
+The **chain instance** returned from a call to `Chain` is a function sharing
+the same API as `Chain`, with the following exception.
 
+When invoked with no arguments or an initial `nil`, the first **link** of the
+chain is executed. Any arguments after the initial `nil` are passed into the
+first link, after the **go** argument.
