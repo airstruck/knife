@@ -1,3 +1,14 @@
+local function append (a, b)
+    if type(b) == 'table' then
+        for i = 1, #b do
+            a[#a + 1] = b[i]
+        end
+    else
+        a[#a + 1] = b
+    end
+    return a
+end
+
 local function getNextLink (callbacks)
 
     local function getCallbackInvoker (index)
@@ -14,18 +25,17 @@ local function getNextLink (callbacks)
         end
     end
 
-    local function nextLink (callback, ...)
-        if not callback then
+    local function nextLink (link, ...)
+        if not link then
             return getCallbackInvoker(1)(...)
         end
-        callbacks[#callbacks + 1] = callback
+        append(callbacks, link)
         return nextLink
     end
 
     return nextLink
 end
 
-return function (callback)
-    local callbacks = { callback }
-    return getNextLink(callbacks)
+return function (link)
+    return getNextLink(append({}, link))
 end
