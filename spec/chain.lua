@@ -14,8 +14,8 @@ T('Given a function taking a callback', function (T)
         return chain
     end
     
-    T('When a table is passed to a chain', function (T)
-        local c = Chain {
+    T('When multiple functions are linked to a chain', function (T)
+        local c = Chain(
             function (go, x)
                 T:assert(x == 123, 'Then args are passed')
                 go(456)
@@ -23,17 +23,17 @@ T('Given a function taking a callback', function (T)
             function (go, x)
                 T:assert(x == 456, 'Then args are passed x2')
                 go(111)
-            end,
-        }
-        c {
+            end
+        )
+        c(
             function (go, x)
                 T:assert(x == 111, 'Then args are passed x3')
                 go(222)
             end,
             function (go, x)
                 T:assert(x == 222, 'Then args are passed x4')
-            end,
-        }
+            end
+        )
         c(nil, 123)
     end)
     

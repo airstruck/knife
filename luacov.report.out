@@ -134,47 +134,37 @@
 ==============================================================================
 ./knife/chain.lua
 ==============================================================================
-    	local function append (a, b)
-  16	    if type(b) == 'table' then
-   6	        for i = 1, #b do
-   4	            a[#a + 1] = b[i]
-    	        end
-    	    else
-  14	        a[#a + 1] = b
-    	    end
-  16	    return a
-    	end
+    	return function (...)
+   7	    local links = { ... }
     	
-    	local function getNextLink (callbacks)
-    	
-    	    local function getCallbackInvoker (index)
+    	    local function Invoker (index)
     	        return function (...)
-  16	            local callback = callbacks[index]
-  16	            if not callback then
+  16	            local link = links[index]
+  16	            if not link then
    1	                return
     	            end
-  15	            local continue = getCallbackInvoker(index + 1)
-  15	            local returned = callback(continue, ...)
+  15	            local continue = Invoker(index + 1)
+  15	            local returned = link(continue, ...)
   15	            if returned then
    4	                returned(function (_, ...) continue(...) end)
     	            end
     	        end
     	    end
     	
-    	    local function nextLink (link, ...)
-  14	        if not link then
-   5	            return getCallbackInvoker(1)(...)
+    	    local function chain (...)
+  14	        if not (...) then
+   5	            return Invoker(1)(select(2, ...))
     	        end
-   9	        append(callbacks, link)
-   9	        return nextLink
+   9	        local offset = #links
+  19	        for index = 1, select('#', ...) do
+  10	            links[offset + index] = select(index, ...)
+    	        end
+   9	        return chain
     	    end
     	
-   7	    return nextLink
+   7	    return chain
     	end
     	
-    	return function (link)
-   7	    return getNextLink(append({}, link))
-    	end
 
 ==============================================================================
 ./knife/convoke.lua
@@ -1256,8 +1246,8 @@
    3	        return chain
     	    end
     	    
-  12	    T('When a table is passed to a chain', function (T)
-   2	        local c = Chain {
+  12	    T('When multiple functions are linked to a chain', function (T)
+   2	        local c = Chain(
     	            function (go, x)
    1	                T:assert(x == 123, 'Then args are passed')
    1	                go(456)
@@ -1265,17 +1255,17 @@
     	            function (go, x)
    1	                T:assert(x == 456, 'Then args are passed x2')
    1	                go(111)
-    	            end,
-   1	        }
-   2	        c {
+    	            end
+    	        )
+   2	        c(
     	            function (go, x)
    1	                T:assert(x == 111, 'Then args are passed x3')
    1	                go(222)
     	            end,
     	            function (go, x)
    1	                T:assert(x == 222, 'Then args are passed x4')
-    	            end,
-   1	        }
+    	            end
+    	        )
    1	        c(nil, 123)
     	    end)
     	    
@@ -2192,7 +2182,7 @@ Summary
 10	0	100.00%	./knife/base.lua
 40	0	100.00%	./knife/behavior.lua
 18	0	100.00%	./knife/bind.lua
-18	0	100.00%	./knife/chain.lua
+15	0	100.00%	./knife/chain.lua
 25	0	100.00%	./knife/convoke.lua
 51	0	100.00%	./knife/event.lua
 43	0	100.00%	./knife/memoize.lua
@@ -2203,7 +2193,7 @@ Summary
 39	0	100.00%	./spec/base.lua
 43	0	100.00%	./spec/behavior.lua
 22	0	100.00%	./spec/bind.lua
-50	0	100.00%	./spec/chain.lua
+48	0	100.00%	./spec/chain.lua
 60	0	100.00%	./spec/convoke.lua
 70	0	100.00%	./spec/event.lua
 111	0	100.00%	./spec/memoize.lua
@@ -2212,4 +2202,4 @@ Summary
 42	0	100.00%	./spec/test.lua
 80	0	100.00%	./spec/timer.lua
 ------------------------
-1176	0	100.00%	
+1171	0	100.00%	

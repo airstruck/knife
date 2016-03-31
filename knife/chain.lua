@@ -1,41 +1,31 @@
-local function append (a, b)
-    if type(b) == 'table' then
-        for i = 1, #b do
-            a[#a + 1] = b[i]
-        end
-    else
-        a[#a + 1] = b
-    end
-    return a
-end
+return function (...)
+    local links = { ... }
 
-local function getNextLink (callbacks)
-
-    local function getCallbackInvoker (index)
+    local function Invoker (index)
         return function (...)
-            local callback = callbacks[index]
-            if not callback then
+            local link = links[index]
+            if not link then
                 return
             end
-            local continue = getCallbackInvoker(index + 1)
-            local returned = callback(continue, ...)
+            local continue = Invoker(index + 1)
+            local returned = link(continue, ...)
             if returned then
                 returned(function (_, ...) continue(...) end)
             end
         end
     end
 
-    local function nextLink (link, ...)
-        if not link then
-            return getCallbackInvoker(1)(...)
+    local function chain (...)
+        if not (...) then
+            return Invoker(1)(select(2, ...))
         end
-        append(callbacks, link)
-        return nextLink
+        local offset = #links
+        for index = 1, select('#', ...) do
+            links[offset + index] = select(index, ...)
+        end
+        return chain
     end
 
-    return nextLink
+    return chain
 end
 
-return function (link)
-    return getNextLink(append({}, link))
-end
