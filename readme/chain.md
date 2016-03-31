@@ -82,7 +82,7 @@ examples above. Any arguments passed to this function will be passed along
 to the next link in the chain, after its **go** argument.
 
 The **link** may receive extra arguments after the **go** argument. The values
-of these arguments come from any arguments passed into the continue function
+of these arguments come from any arguments passed into the **go** function
 from the previous link. The first link in the chain will receive any extra
 arguments passed after the initial `nil` when executing the chain.
 
@@ -91,7 +91,9 @@ In this case, the next link (if any) will be appended to the returned instance.
 This allows for the creation of APIs with functions that return chains rather
 than accepting callbacks.
 
-If a **link** returns anything, it must be a **chain instance**.
+Each **link** is responsible for either calling **go** (directly or indirectly)
+or returning another **chain instance**. It should not do both. If a link returns
+anything, it must be a **chain instance**.
 
 ### Chain instance
 
