@@ -134,26 +134,26 @@
 ==============================================================================
 ./knife/chain.lua
 ==============================================================================
+    	local function Invoker (links, index)
+    	    return function (...)
+  16	        local link = links[index]
+  16	        if not link then
+   1	            return
+    	        end
+  15	        local continue = Invoker(links, index + 1)
+  15	        local returned = link(continue, ...)
+  15	        if returned then
+   4	            returned(function (_, ...) continue(...) end)
+    	        end
+    	    end
+    	end
+    	    
     	return function (...)
    7	    local links = { ... }
     	
-    	    local function Invoker (index)
-    	        return function (...)
-  16	            local link = links[index]
-  16	            if not link then
-   1	                return
-    	            end
-  15	            local continue = Invoker(index + 1)
-  15	            local returned = link(continue, ...)
-  15	            if returned then
-   4	                returned(function (_, ...) continue(...) end)
-    	            end
-    	        end
-    	    end
-    	
     	    local function chain (...)
   14	        if not (...) then
-   5	            return Invoker(1)(select(2, ...))
+   5	            return Invoker(links, 1)(select(2, ...))
     	        end
    9	        local offset = #links
   19	        for index = 1, select('#', ...) do
