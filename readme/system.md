@@ -19,7 +19,7 @@ local entities = {
 }
 ```
 
-Define a system. Systems iterate over an entity list, looking at each entity for relevant components and processing every matching entity. The following system will process any entity with "position" and "velocity" components, updating the position based on the velocity. 
+Define a system. Systems process any entity having the required components (and ignore other entities). The following system will process any entity with "position" and "velocity" components, updating the position based on the velocity. 
 
 ```lua
 local updateMotion = System(
@@ -78,8 +78,11 @@ The API consists of a single function named `System`.
   "pseudo-component" keys. The following pseudo-components are provided:
 
   - `_entity`: The entity containing the components being processed.
-  - `_entities`: The entities list being processed.
-  - `_index`: The index of the current entity within the entities list.
+  - `_aspects`: The aspect list passed to the System constructor.
+  - `_process`: The process function passed to the System constructor.
+  
+  The underscore prefix is reserved for pseudo-components and should not
+  be used for regular components.
 
   **choices**
 
