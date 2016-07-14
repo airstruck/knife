@@ -30,11 +30,35 @@ local updateMotion = System(
     end)
 ```
 
-Invoke a system. Pass in an entities list, followed by any optional arguments.
+Invoke a system. Pass in an entity, followed by any optional arguments.
 
 ```lua
 function love.update (dt)
-    updateMotion(entities, dt)
+    for _, entity in ipairs(entities) do
+        updateMotion(entity, dt)
+    end
+end
+```
+
+This module is only concerned with the "system" part of ECS, and doesn't
+attempt to manage entity lists. However, the entities list and current index
+can easily be passed into systems as optional arguments. If entities are stored
+in a table, take care to reverse-iterate the table when removing entities.
+
+```lua
+local updateDeath = System(
+    { 'position', 'health' },
+    function (p, health, entities, i)
+        if health <= 0 then
+            entities[#entities + 1] = ExplosionEntity(p.x, p.y)
+            table.remove(entities, i)
+        end
+    end)
+    
+function love.update (dt)
+    for i = #entities, 1, -1 do
+        updateDeath(entities[i], entities, i)
+    end
 end
 ```
 
@@ -42,7 +66,7 @@ end
 
 The API consists of a single function named `System`.
 
-### System(aspects, process) -> function (entities, ...)
+### System(aspects, process) -> function (entity, ...)
 
 - `aspects`: A list of keys which must be present in entities in order to
   process them. For each "aspect", the `process` function will receive one
@@ -69,7 +93,7 @@ The API consists of a single function named `System`.
 
   **sigils**
 
-  An aspect may begin with the special characters `?`, `-` or `!`.
+  An aspect may begin with the special characters `?`, `-`, `!`, or `=`.
 
   If the aspect begins with `?`, it is optional, and will not prevent the
   entity from being processed even if no matching components are found.
@@ -82,26 +106,22 @@ The API consists of a single function named `System`.
   If the aspect begins with `!`, all keys listed in the aspect must not be
   present in an entity in order to process it. These aspects have no effect
   on the arguments list.
+  
+  An aspect may be prefixed with `=` to indicate that it demands a return value.
+  The `process` function should return one value for each aspect prefixed with
+  `=` (even if the value has not changed). The returned values are used to
+  update the corresponding components, allows systems to mutate components
+  with primitive values. This sigil cannot be combined with pipe-delimited
+  choices.
 
 - `process`: A function that will process components. It should take one
   parameter for each value in the `aspects` list, plus any number of additional
   parameters for optional arguments passed to the returned function following
   the entities list.
 
-  The `process` function may return up to two values. The first return value
-  identifies entities to be removed from the list, and the second contains
-  new entities to append to the list.
-
-  If the first return value is `true`, the entity being processed will be
-  removed from the entities list. If it is a table of entities, all entities
-  in the table will be removed.
-
-  The second return value, if present, should be a table of entities to append
-  to the entities list.
-  
-  Entities will be removed and appended as soon as no systems are running.
-
 The `System` factory function returns a function representing your system.
 Call this returned function as needed; for example, in your update or draw
-routine. It requires an entities list as the first argument, followed by any
+routine. It requires an entity as the first argument, followed by any
 number of optional arguments to be passed along to the `process` function.
+It returns `true` if the entity was processed, otherwise it returns `nil`.
+

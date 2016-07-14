@@ -1,2205 +1,2064 @@
-
 ==============================================================================
 ./knife/base.lua
 ==============================================================================
-   1	return {
-    	    extend = function (self, subtype)
-  18	        subtype = subtype or {}
-  18	        local meta = { __index = subtype }
-  36	        return setmetatable(subtype, {
-  18	            __index = self,
-    	            __call = function (self, ...)
-   8	                local instance = setmetatable({}, meta)
-   8	                return instance, instance:constructor(...)
-    	            end
-  18	        })
-    	    end,
-   5	    constructor = function () end,
-   1	}
-    	
+   1 return {
+         extend = function (self, subtype)
+  18         subtype = subtype or {}
+  18         local meta = { __index = subtype }
+  36         return setmetatable(subtype, {
+  18             __index = self,
+                 __call = function (self, ...)
+   8                 local instance = setmetatable({}, meta)
+   8                 return instance, instance:constructor(...)
+                 end
+  18         })
+         end,
+   5     constructor = function () end,
+   1 }
+
 
 ==============================================================================
 ./knife/behavior.lua
 ==============================================================================
-    	-- behavior.lua -- a state manager
-    	
-    	-- internal/external api
-    	
-    	local function getCurrentFrame (behavior)
-  18	    return behavior.states[behavior.state][behavior.index]
-    	end
-    	
-    	local function advanceFrame (behavior)
-  12	    local nextState = behavior.frame.after
-  12	    local nextIndex = behavior.index + 1
-  12	    local maxIndex = #behavior.states[behavior.state]
-    	
-  12	    if nextState then
-   2	        behavior.state = nextState
-   2	        nextIndex = 1
-  10	    elseif nextIndex > maxIndex then
-   2	        nextIndex = 1
-    	    end
-    	
-  12	    behavior.index = nextIndex
-  12	    behavior.frame = behavior:getCurrentFrame()
-    	end
-    	
-    	local function performAction (behavior)
-  18	    local act = behavior.frame.action
-    	
-  18	    if act then
-   2	        act(behavior, behavior.subject)
-    	    end
-    	end
-    	
-    	-- external api
-    	
-    	local function update (behavior, dt)
-   3	    behavior.elapsed = behavior.elapsed + dt
-    	
-  15	    while behavior.elapsed >= behavior.frame.duration do
-  12	        behavior.elapsed = behavior.elapsed - behavior.frame.duration
-  12	        behavior:advanceFrame()
-  12	        behavior:performAction()
-    	    end
-    	
-   3	    return behavior
-    	end
-    	
-    	local function setState (behavior, state, index)
-   1	    behavior.state = state
-   1	    behavior.index = index or 1
-   1	    behavior.elapsed = 0
-   1	    behavior.frame = behavior:getCurrentFrame()
-   1	    behavior:performAction()
-   1	    return behavior
-    	end
-    	
-    	-- behavior factory
-    	
-    	return function (states, subject)
-   5	    local behavior = {
-   5	        states = states,
-   5	        subject = subject,
-   5	        elapsed = 0,
-   5	        state = 'default',
-   5	        index = 1,
-    	        -- internal api
-   5	        getCurrentFrame = getCurrentFrame,
-   5	        advanceFrame = advanceFrame,
-   5	        performAction = performAction,
-    	        -- external api
-   5	        update = update,
-   5	        setState = setState
-    	    }
-    	
-   5	    behavior.frame = behavior:getCurrentFrame()
-   5	    behavior:performAction()
-    	
-   5	    return behavior
-    	end
+     -- behavior.lua -- a state manager
+
+     -- internal/external api
+
+     local function getCurrentFrame (behavior)
+  18     return behavior.states[behavior.state][behavior.index]
+     end
+
+     local function advanceFrame (behavior)
+  12     local nextState = behavior.frame.after
+  12     local nextIndex = behavior.index + 1
+  12     local maxIndex = #behavior.states[behavior.state]
+
+  12     if nextState then
+   2         behavior.state = nextState
+   2         nextIndex = 1
+  10     elseif nextIndex > maxIndex then
+   2         nextIndex = 1
+         end
+
+  12     behavior.index = nextIndex
+  12     behavior.frame = behavior:getCurrentFrame()
+     end
+
+     local function performAction (behavior)
+  18     local act = behavior.frame.action
+
+  18     if act then
+   2         act(behavior, behavior.subject)
+         end
+     end
+
+     -- external api
+
+     local function update (behavior, dt)
+   3     behavior.elapsed = behavior.elapsed + dt
+
+  15     while behavior.elapsed >= behavior.frame.duration do
+  12         behavior.elapsed = behavior.elapsed - behavior.frame.duration
+  12         behavior:advanceFrame()
+  12         behavior:performAction()
+         end
+
+   3     return behavior
+     end
+
+     local function setState (behavior, state, index)
+   1     behavior.state = state
+   1     behavior.index = index or 1
+   1     behavior.elapsed = 0
+   1     behavior.frame = behavior:getCurrentFrame()
+   1     behavior:performAction()
+   1     return behavior
+     end
+
+     -- behavior factory
+
+     return function (states, subject)
+   5     local behavior = {
+   5         states = states,
+   5         subject = subject,
+   5         elapsed = 0,
+   5         state = 'default',
+   5         index = 1,
+             -- internal api
+   5         getCurrentFrame = getCurrentFrame,
+   5         advanceFrame = advanceFrame,
+   5         performAction = performAction,
+             -- external api
+   5         update = update,
+   5         setState = setState
+         }
+
+   5     behavior.frame = behavior:getCurrentFrame()
+   5     behavior:performAction()
+
+   5     return behavior
+     end
 
 ==============================================================================
 ./knife/bind.lua
 ==============================================================================
-   1	local loadstring = _G.loadstring or _G.load
-   1	local tconcat = table.concat
-    	
-   1	local helperCache = {}
-    	
-    	local function buildHelper (argCount)
-   3	    if helperCache[argCount] then
-   1	        return helperCache[argCount]
-    	    end
-   2	    local argList1 = { 'f' }
-   2	    local argList2 = {}
-   4	    for index = 1, argCount do
-   2	        argList1[index + 1] = 'a' .. index
-   2	        argList2[index] = 'a' .. index
-    	    end
-   2	    argList2[argCount + 1] = '...'
-   2	    local source = 'return function(' .. tconcat(argList1, ', ') ..
-   2	        ') return function(...) return f(' .. tconcat(argList2, ', ') ..
-   2	        ') end end'
-   2	    local helper = loadstring(source)()
-   2	    helperCache[argCount] = helper
-   2	    return helper
-    	end
-    	
-    	return function (func, ...)
-   3	    return buildHelper(select('#', ...))(func, ...)
-    	end
+   1 local loadstring = _G.loadstring or _G.load
+   1 local tconcat = table.concat
+
+   1 local helperCache = {}
+
+     local function buildHelper (argCount)
+   3     if helperCache[argCount] then
+   1         return helperCache[argCount]
+         end
+   2     local argList1 = { 'f' }
+   2     local argList2 = {}
+   4     for index = 1, argCount do
+   2         argList1[index + 1] = 'a' .. index
+   2         argList2[index] = 'a' .. index
+         end
+   2     argList2[argCount + 1] = '...'
+   2     local source = 'return function(' .. tconcat(argList1, ', ') ..
+   2         ') return function(...) return f(' .. tconcat(argList2, ', ') ..
+   2         ') end end'
+   2     local helper = loadstring(source)()
+   2     helperCache[argCount] = helper
+   2     return helper
+     end
+
+     return function (func, ...)
+   3     return buildHelper(select('#', ...))(func, ...)
+     end
 
 ==============================================================================
 ./knife/chain.lua
 ==============================================================================
-    	local function Invoker (links, index)
-    	    return function (...)
-  16	        local link = links[index]
-  16	        if not link then
-   1	            return
-    	        end
-  15	        local continue = Invoker(links, index + 1)
-  15	        local returned = link(continue, ...)
-  15	        if returned then
-   4	            returned(function (_, ...) continue(...) end)
-    	        end
-    	    end
-    	end
-    	    
-    	return function (...)
-   7	    local links = { ... }
-    	
-    	    local function chain (...)
-  14	        if not (...) then
-   5	            return Invoker(links, 1)(select(2, ...))
-    	        end
-   9	        local offset = #links
-  19	        for index = 1, select('#', ...) do
-  10	            links[offset + index] = select(index, ...)
-    	        end
-   9	        return chain
-    	    end
-    	
-   7	    return chain
-    	end
-    	
+     local function Invoker (links, index)
+         return function (...)
+  16         local link = links[index]
+  16         if not link then
+   1             return
+             end
+  15         local continue = Invoker(links, index + 1)
+  15         local returned = link(continue, ...)
+  15         if returned then
+   4             returned(function (_, ...) continue(...) end)
+             end
+         end
+     end
+         
+     return function (...)
+   7     local links = { ... }
+
+         local function chain (...)
+  14         if not (...) then
+   5             return Invoker(links, 1)(select(2, ...))
+             end
+   9         local offset = #links
+  19         for index = 1, select('#', ...) do
+  10             links[offset + index] = select(index, ...)
+             end
+   9         return chain
+         end
+
+   7     return chain
+     end
+
 
 ==============================================================================
 ./knife/convoke.lua
 ==============================================================================
-    	return function (routine)
-   4	    local routines = { routine }
-   4	    local routineIndex = 1
-   4	    local isFinished = false
-    	
-    	    local function execute ()
-   5	        local continueCount = 0
-    	        local run
-    	
-    	        local function continue ()
-   8	            continueCount = continueCount + 1
-    	            return function (...)
-   8	                continueCount = continueCount - 1
-   8	                if continueCount == 0 then
-   7	                    return run(...)
-    	                end
-    	            end
-    	        end
-    	
-    	        local function wait (...)
-   7	            return coroutine.yield(...)
-    	        end
-    	
-  10	        local r = coroutine.create(function ()
-   5	            isFinished = false
-  11	            while routineIndex <= #routines do
-   6	                routines[routineIndex](continue, wait)
-   6	                continueCount = 0
-   6	                routineIndex = routineIndex + 1
-    	            end
-   5	            isFinished = true
-    	        end)
-    	
-    	        run = function (...)
-  12	            return coroutine.resume(r, ...)
-    	        end
-    	
-   5	        run()
-    	    end
-    	
-    	    local function appendOrExecute (routine)
-   6	        if routine then
-   2	            routines[#routines + 1] = routine
-   2	            if isFinished then
-   1	                execute()
-    	            end
-   2	            return appendOrExecute
-    	        else
-   4	            execute()
-    	        end
-    	    end
-    	
-   4	    return appendOrExecute
-    	end
+     return function (routine)
+   4     local routines = { routine }
+   4     local routineIndex = 1
+   4     local isFinished = false
+
+         local function execute ()
+   5         local continueCount = 0
+             local run
+
+             local function continue ()
+   8             continueCount = continueCount + 1
+                 return function (...)
+   8                 continueCount = continueCount - 1
+   8                 if continueCount == 0 then
+   7                     return run(...)
+                     end
+                 end
+             end
+
+             local function wait (...)
+   7             return coroutine.yield(...)
+             end
+
+  10         local r = coroutine.create(function ()
+   5             isFinished = false
+  11             while routineIndex <= #routines do
+   6                 routines[routineIndex](continue, wait)
+   6                 continueCount = 0
+   6                 routineIndex = routineIndex + 1
+                 end
+   5             isFinished = true
+             end)
+
+             run = function (...)
+  12             return coroutine.resume(r, ...)
+             end
+
+   5         run()
+         end
+
+         local function appendOrExecute (routine)
+   6         if routine then
+   2             routines[#routines + 1] = routine
+   2             if isFinished then
+   1                 execute()
+                 end
+   2             return appendOrExecute
+             else
+   4             execute()
+             end
+         end
+
+   4     return appendOrExecute
+     end
 
 ==============================================================================
 ./knife/event.lua
 ==============================================================================
-    	-- Event module
-   1	local Event = {}
-    	
-    	-- Event handler registry
-   1	Event.handlers = {}
-    	
-    	-- Remove an event handler from the registry
-    	local function remove (self)
-   5	    if not self.isRegistered then
-   1	        return self
-    	    end
-   4	    if self.prevHandler then
-   1	        self.prevHandler.nextHandler = self.nextHandler
-    	    end
-   4	    if self.nextHandler then
-   1	        self.nextHandler.prevHandler = self.prevHandler
-    	    end
-   4	    if Event.handlers[self.name] == self then
-   3	        Event.handlers[self.name] = self.nextHandler
-    	    end
-   4	    self.prevHandler = nil
-   4	    self.nextHandler = nil
-   4	    self.isRegistered = false
-    	
-   4	    return self
-    	end
-    	
-    	-- Insert an event handler into the registry
-    	local function register (self)
-  20	    if self.isRegistered then
-   1	        return self
-    	    end
-  19	    self.nextHandler = Event.handlers[self.name]
-  19	    if self.nextHandler then
-   6	        self.nextHandler.prevHandler = self
-    	    end
-  19	    Event.handlers[self.name] = self
-  19	    self.isRegistered = true
-    	
-  19	    return self
-    	end
-    	
-    	-- Create an event handler
-    	local function Handler (name, callback)
-  19	    return {
-  19	        name = name,
-  19	        callback = callback,
-  19	        isRegistered = false,
-  19	        remove = remove,
-  19	        register = register
-  19	    }
-    	end
-    	
-    	
-    	
-    	-- Create and register a new event handler
-   1	function Event.on (name, callback)
-  19	    return register(Handler(name, callback))
-    	end
-    	
-    	-- Dispatch an event
-   1	function Event.dispatch (name, ...)
-  10	    local handler = Event.handlers[name]
-    	
-  18	    while handler do
-   9	        if handler.callback(...) == false then
-   1	            return handler
-    	        end
-   8	        handler = handler.nextHandler
-    	    end
-    	end
-    	
-    	local function isCallable (value)
-   3	    return type(value) == 'function' or
-   3	        getmetatable(value) and getmetatable(value).__call
-    	end
-    	
-    	-- Inject a dispatcher into a table.
-    	local function hookDispatcher (t, key)
-   3	    local original = t[key]
-    	
-   3	    if isCallable(original) then
-    	        t[key] = function (...)
-   1	            original(...)
-   1	            return Event.dispatch(key, ...)
-    	        end
-    	    else
-    	        t[key] = function (...)
-   2	            return Event.dispatch(key, ...)
-    	        end
-    	    end
-    	end
-    	
-    	-- Inject dispatchers into a table. Examples:
-    	-- Event.hook(love.handlers)
-    	-- Event.hook(love, { 'load', 'update', 'draw' })
-   1	function Event.hook (t, keys)
-   3	    if keys then
-   2	        for _, key in ipairs(keys) do
-   1	            hookDispatcher(t, key)
-    	        end
-    	    else
-   4	        for key in pairs(t) do
-   2	            hookDispatcher(t, key)
-    	        end
-    	    end
-    	end
-    	
-   1	return Event
+     -- Event module
+   1 local Event = {}
+
+     -- Event handler registry
+   1 Event.handlers = {}
+
+     -- Remove an event handler from the registry
+     local function remove (self)
+   5     if not self.isRegistered then
+   1         return self
+         end
+   4     if self.prevHandler then
+   1         self.prevHandler.nextHandler = self.nextHandler
+         end
+   4     if self.nextHandler then
+   1         self.nextHandler.prevHandler = self.prevHandler
+         end
+   4     if Event.handlers[self.name] == self then
+   3         Event.handlers[self.name] = self.nextHandler
+         end
+   4     self.prevHandler = nil
+   4     self.nextHandler = nil
+   4     self.isRegistered = false
+
+   4     return self
+     end
+
+     -- Insert an event handler into the registry
+     local function register (self)
+  20     if self.isRegistered then
+   1         return self
+         end
+  19     self.nextHandler = Event.handlers[self.name]
+  19     if self.nextHandler then
+   6         self.nextHandler.prevHandler = self
+         end
+  19     Event.handlers[self.name] = self
+  19     self.isRegistered = true
+
+  19     return self
+     end
+
+     -- Create an event handler
+     local function Handler (name, callback)
+  19     return {
+  19         name = name,
+  19         callback = callback,
+  19         isRegistered = false,
+  19         remove = remove,
+  19         register = register
+  19     }
+     end
+
+
+
+     -- Create and register a new event handler
+   1 function Event.on (name, callback)
+  19     return register(Handler(name, callback))
+     end
+
+     -- Dispatch an event
+   1 function Event.dispatch (name, ...)
+  10     local handler = Event.handlers[name]
+
+  18     while handler do
+   9         if handler.callback(...) == false then
+   1             return handler
+             end
+   8         handler = handler.nextHandler
+         end
+     end
+
+     local function isCallable (value)
+   3     return type(value) == 'function' or
+   3         getmetatable(value) and getmetatable(value).__call
+     end
+
+     -- Inject a dispatcher into a table.
+     local function hookDispatcher (t, key)
+   3     local original = t[key]
+
+   3     if isCallable(original) then
+             t[key] = function (...)
+   1             original(...)
+   1             return Event.dispatch(key, ...)
+             end
+         else
+             t[key] = function (...)
+   2             return Event.dispatch(key, ...)
+             end
+         end
+     end
+
+     -- Inject dispatchers into a table. Examples:
+     -- Event.hook(love.handlers)
+     -- Event.hook(love, { 'load', 'update', 'draw' })
+   1 function Event.hook (t, keys)
+   3     if keys then
+   2         for _, key in ipairs(keys) do
+   1             hookDispatcher(t, key)
+             end
+         else
+   4         for key in pairs(t) do
+   2             hookDispatcher(t, key)
+             end
+         end
+     end
+
+   1 return Event
 
 ==============================================================================
 ./knife/memoize.lua
 ==============================================================================
-   1	local loadstring = _G.loadstring or _G.load
-   1	local weakKeys = { __mode = 'k' }
-   1	local cache = setmetatable({}, weakKeys)
-   1	local resultsKey = {}
-   1	local nilKey = {}
-    	
-    	local function getMetaCall (callable)
-  64	    local meta = getmetatable(callable)
-  64	    return meta and meta.__call
-    	end
-    	
-   1	local tupleConstructorCache = {}
-    	
-    	local function buildTupleConstructor (n)
-  21	    if tupleConstructorCache[n] then
-  18	        return tupleConstructorCache[n]
-    	    end
-   3	    local t = {}
-   9	    for i = 1, n do
-   6	        t[i] = "a" .. i
-    	    end
-   3	    local args = table.concat(t, ',')
-   6	    local ctor = loadstring('return function(' .. args ..
-   6	        ') return function() return ' .. args .. ' end end')()
-   3	    tupleConstructorCache[n] = ctor
-   3	    return ctor
-    	end
-    	
-    	local function tuple (...)
-  21	    return buildTupleConstructor(select('#', ...))(...)
-    	end
-    	
-    	return function (callable)
-  54	    local metaCall = getMetaCall(callable)
-    	
-  54	    if type(callable) ~= 'function' and not metaCall then
-   4	        error 'Attempted to memoize a non-callable value.'
-    	    end
-    	
-  50	    cache[callable] = setmetatable({}, weakKeys)
-    	
-    	    local function run (...)
-  45	        local node = cache[callable]
-  45	        local argc = select('#', ...)
- 116	        for i = 1, argc do
-  71	            local key = select(i, ...)
-  71	            if key == nil then
-   4	                key = nilKey
-    	            end
-  71	            if not node[key] then
-  30	                node[key] = setmetatable({}, weakKeys)
-    	            end
-  71	            node = node[key]
-    	        end
-    	
-  45	        if not node[resultsKey] then
-  22	            node[resultsKey] = tuple(callable(...))
-    	        end
-    	
-  44	        return node[resultsKey]()
-    	    end
-    	
-  50	    if metaCall then
-    	        return function (...)
-  10	            local call = getMetaCall(callable)
-    	
-  10	            if call ~= metaCall then
-   2	                cache[callable] = setmetatable({}, weakKeys)
-   2	                metaCall = call
-    	            end
-    	
-  10	            return run(...)
-  16	        end, cache, resultsKey, nilKey
-    	    end
-    	
-  34	    return run, cache, resultsKey, nilKey
-    	end
+   1 local loadstring = _G.loadstring or _G.load
+   1 local weakKeys = { __mode = 'k' }
+   1 local cache = setmetatable({}, weakKeys)
+   1 local resultsKey = {}
+   1 local nilKey = {}
+
+     local function getMetaCall (callable)
+  64     local meta = getmetatable(callable)
+  64     return meta and meta.__call
+     end
+
+   1 local tupleConstructorCache = {}
+
+     local function buildTupleConstructor (n)
+  21     if tupleConstructorCache[n] then
+  18         return tupleConstructorCache[n]
+         end
+   3     local t = {}
+   9     for i = 1, n do
+   6         t[i] = "a" .. i
+         end
+   3     local args = table.concat(t, ',')
+   6     local ctor = loadstring('return function(' .. args ..
+   6         ') return function() return ' .. args .. ' end end')()
+   3     tupleConstructorCache[n] = ctor
+   3     return ctor
+     end
+
+     local function tuple (...)
+  21     return buildTupleConstructor(select('#', ...))(...)
+     end
+
+     return function (callable)
+  54     local metaCall = getMetaCall(callable)
+
+  54     if type(callable) ~= 'function' and not metaCall then
+   4         error 'Attempted to memoize a non-callable value.'
+         end
+
+  50     cache[callable] = setmetatable({}, weakKeys)
+
+         local function run (...)
+  45         local node = cache[callable]
+  45         local argc = select('#', ...)
+ 116         for i = 1, argc do
+  71             local key = select(i, ...)
+  71             if key == nil then
+   4                 key = nilKey
+                 end
+  71             if not node[key] then
+  30                 node[key] = setmetatable({}, weakKeys)
+                 end
+  71             node = node[key]
+             end
+
+  45         if not node[resultsKey] then
+  22             node[resultsKey] = tuple(callable(...))
+             end
+
+  44         return node[resultsKey]()
+         end
+
+  50     if metaCall then
+             return function (...)
+  10             local call = getMetaCall(callable)
+
+  10             if call ~= metaCall then
+   2                 cache[callable] = setmetatable({}, weakKeys)
+   2                 metaCall = call
+                 end
+
+  10             return run(...)
+  16         end, cache, resultsKey, nilKey
+         end
+
+  34     return run, cache, resultsKey, nilKey
+     end
 
 ==============================================================================
 ./knife/serialize.lua
 ==============================================================================
-   1	local tinsert, tconcat, infinity = table.insert, table.concat, math.huge
-    	
-    	return function (value)
-   2	    local intro, outro, ready, known = {}, {}, {}, {}
-   2	    local knownCount = 0
-   2	    local writer = {}
-    	
-    	    -- get writer delegate for this value's type
-    	    local function getWriter (value)
-  66	        return writer[type(value)]
-    	    end
-    	
-    	    -- check if a value has a representation yet
-    	    local function isReady (value)
-  58	        return type(value) ~= 'table' or ready[value]
-    	    end
-    	
-    	    -- serialize tables
-   2	    function writer.table (value)
-  10	        if known[value] then
-   4	            return known[value]
-    	        end
-    	
-   6	        knownCount = knownCount + 1
-   6	        local variable = ('v%i'):format(knownCount)
-   6	        known[value] = variable
-    	
-   6	        local parts = {}
-  38	        for k, v in pairs(value) do
-  32	            local writeKey, writeValue = getWriter(k), getWriter(v)
-  32	            if writeKey and writeValue then
-  30	                local key, value = writeKey(k), writeValue(v)
-  30	                if isReady(k) and isReady(v) then
-  26	                    tinsert(parts, ('[%s]=%s'):format(key, value))
-    	                else
-   4	                    tinsert(outro, ('%s[%s]=%s'):format(variable, key, value))
-    	                end
-    	            end
-    	        end
-    	
-   6	        local fields = tconcat(parts, ',')
-   6	        tinsert(intro, ('local %s={%s}'):format(variable, fields))
-   6	        ready[value] = true
-    	
-   6	        return variable
-    	    end
-    	
-    	    -- preserve sign bit on NaN, since Lua prints "nan" or "-nan"
-    	    local function writeNan (n)
-   4	        return tostring(n) == tostring(0/0) and '0/0' or '-(0/0)'
-    	    end
-    	
-    	    -- serialize numbers
-   2	    function writer.number (value)
-  26	        return value == infinity and '1/0'
-  26	            or value == -infinity and '-1/0'
-  24	            or value ~= value and writeNan(value)
-  26	            or ('%.17G'):format(value)
-    	    end
-    	
-    	    -- serialize strings
-   2	    function writer.string (value)
-  24	        return ('%q'):format(value)
-    	    end
-    	
-    	    -- serialize booleans
-   2	    writer.boolean = tostring
-    	
-    	    -- concatenate array, joined by and terminated with line break
-    	    local function lines (t)
-   4	        return #t == 0 and '' or tconcat(t, '\n') .. '\n'
-    	    end
-    	
-    	    -- generate serialized result
-   2	    local write = getWriter(value)
-   2	    local result = write and write(value) or 'nil'
-   2	    return lines(intro) .. lines(outro) .. 'return ' .. result
-    	end
+   1 local tinsert, tconcat, infinity = table.insert, table.concat, math.huge
+
+     return function (value)
+   2     local intro, outro, ready, known = {}, {}, {}, {}
+   2     local knownCount = 0
+   2     local writer = {}
+
+         -- get writer delegate for this value's type
+         local function getWriter (value)
+  66         return writer[type(value)]
+         end
+
+         -- check if a value has a representation yet
+         local function isReady (value)
+  58         return type(value) ~= 'table' or ready[value]
+         end
+
+         -- serialize tables
+   2     function writer.table (value)
+  10         if known[value] then
+   4             return known[value]
+             end
+
+   6         knownCount = knownCount + 1
+   6         local variable = ('v%i'):format(knownCount)
+   6         known[value] = variable
+
+   6         local parts = {}
+  38         for k, v in pairs(value) do
+  32             local writeKey, writeValue = getWriter(k), getWriter(v)
+  32             if writeKey and writeValue then
+  30                 local key, value = writeKey(k), writeValue(v)
+  30                 if isReady(k) and isReady(v) then
+  26                     tinsert(parts, ('[%s]=%s'):format(key, value))
+                     else
+   4                     tinsert(outro, ('%s[%s]=%s'):format(variable, key, value))
+                     end
+                 end
+             end
+
+   6         local fields = tconcat(parts, ',')
+   6         tinsert(intro, ('local %s={%s}'):format(variable, fields))
+   6         ready[value] = true
+
+   6         return variable
+         end
+
+         -- preserve sign bit on NaN, since Lua prints "nan" or "-nan"
+         local function writeNan (n)
+   4         return tostring(n) == tostring(0/0) and '0/0' or '-(0/0)'
+         end
+
+         -- serialize numbers
+   2     function writer.number (value)
+  26         return value == infinity and '1/0'
+  26             or value == -infinity and '-1/0'
+  24             or value ~= value and writeNan(value)
+  26             or ('%.17G'):format(value)
+         end
+
+         -- serialize strings
+   2     function writer.string (value)
+  24         return ('%q'):format(value)
+         end
+
+         -- serialize booleans
+   2     writer.boolean = tostring
+
+         -- concatenate array, joined by and terminated with line break
+         local function lines (t)
+   4         return #t == 0 and '' or tconcat(t, '\n') .. '\n'
+         end
+
+         -- generate serialized result
+   2     local write = getWriter(value)
+   2     local result = write and write(value) or 'nil'
+   2     return lines(intro) .. lines(outro) .. 'return ' .. result
+     end
 
 ==============================================================================
 ./knife/system.lua
 ==============================================================================
-   1	local loadstring = _G.loadstring or _G.load
-   1	local tremove = table.remove
-   1	local tconcat = table.concat
-   1	local type = type
-    	
-   1	local runningTraversals = 0
-    	local removalList
-    	local insertionList
-    	
-    	local function updateRemovalList (entities, value, entity)
-  25	    if not value then
-  21	        return
-    	    end
-   4	    if not removalList then
-   3	        removalList = { byIndex = {}, byEntities = {} }
-    	    end
-   4	    local byIndex, byEntities = removalList.byIndex, removalList.byEntities
-   4	    local list = byEntities[entities]
-   4	    if not list then
-   3	        list = {}
-   3	        byEntities[entities] = list
-   3	        byIndex[#byIndex + 1] = entities
-    	    end
-    	
-   4	    local valueType = type(value)
-    	
-   4	    if valueType == 'boolean' then
-   1	        list[entity] = true
-   1	        return
-    	    end
-    	
-   3	    if valueType == 'table' then
-   6	        for i = 1, #value do
-   4	            list[value[i]] = true
-    	        end
-   2	        return
-    	    end
-    	
-   1	    runningTraversals = 0
-   1	    removalList = nil
-   1	    insertionList = nil
-    	
-   1	    error 'system returned an invalid value'
-    	end
-    	
-    	local function updateInsertionList (entities, value)
-  24	    if not value then
-  23	        return
-    	    end
-   1	    if not insertionList then
-   1	        insertionList = {}
-    	    end
-    	
-   1	    insertionList[#insertionList + 1] = { entities, value }
-    	end
-    	
-    	local function removeEntities ()
-  12	    if not removalList then
-  10	        return
-    	    end
-   2	    local byIndex, byEntities = removalList.byIndex, removalList.byEntities
-   4	    for entitiesIndex = 1, #byIndex do
-   2	        local entities = byIndex[entitiesIndex]
-   2	        local list = byEntities[entities]
-   6	        for index = #entities, 1, -1 do
-   4	            if list[entities[index]] then
-   3	                tremove(entities, index)
-    	            end
-    	        end
-    	    end
-   2	    removalList = nil
-    	end
-    	
-    	local function createEntities ()
-  12	    if not insertionList then
-  11	        return
-    	    end
-   2	    for itemIndex = 1, #insertionList do
-   1	        local item = insertionList[itemIndex]
-   1	        local entities, group = item[1], item[2]
-   2	        for newEntityIndex = 1, #group do
-   1	            entities[#entities + 1] = group[newEntityIndex]
-    	        end
-    	    end
-   1	    insertionList = nil
-    	end
-    	
-    	local function traverse (entities, aspects, process, invoke, ...)
-  13	    runningTraversals = runningTraversals + 1
-    	
-  37	    for index = 1, #entities do
-  25	        local entity = entities[index]
-  25	        if not entity then
-    	            break
-    	        end
-  25	        local old, new = invoke(process, entity, entities, index, ...)
-    	
-  25	        updateRemovalList(entities, old, entity)
-  24	        updateInsertionList(entities, new)
-    	    end
-    	
-  12	    runningTraversals = runningTraversals - 1
-    	
-  12	    if runningTraversals == 0 then
-  12	        removeEntities()
-  12	        createEntities()
-    	    end
-    	end
-    	
-    	local function hasSigil (sigil, value)
- 320	    return type(value) == 'string' and sigil:byte() == value:byte()
-    	end
-    	
-    	local function generateProcessInvoker (aspects)
-  34	    local args = {}
-  34	    local cond = {}
-  34	    local localIndex = 0
-  34	    local choicePattern = '([^|]+)'
-    	
-    	    local function suppress (aspect, condition)
-   2	        cond[#cond + 1] = 'if nil'
-   4	        for option in aspect:gmatch(choicePattern) do
-   2	            cond[#cond + 1] = condition:format(option)
-    	        end
-   2	        cond[#cond + 1] = 'then return end'
-    	    end
-    	
-    	    local function supply (aspect, isOptional)
-  62	        localIndex = localIndex + 1
-  62	        cond[#cond + 1] = ('local l%d = nil'):format(localIndex)
- 126	        for option in aspect:gmatch(choicePattern) do
-  64	            cond[#cond + 1] = ('or _entity[%q]'):format(option)
-    	        end
-  62	        if not isOptional then
-  61	            cond[#cond + 1] = ('if not l%d then return end'):format(localIndex)
-    	        end
-  62	        args[#args + 1] = ('l%d'):format(localIndex)
-    	    end
-    	
- 102	    for index = 1, #aspects do
-  68	        local aspect = aspects[index]
-  68	        if hasSigil('_', aspect) then
-   4	            args[#args + 1] = aspect
-  64	        elseif hasSigil('!', aspect) or hasSigil('~', aspect) then
-   1	            suppress(aspect:sub(2), 'or _entity[%q]')
-  63	        elseif hasSigil('-', aspect) then
-   1	            suppress(aspect:sub(2), 'or not _entity[%q]')
-  62	        elseif hasSigil('?', aspect) then
-   1	            supply(aspect:sub(2), true)
-    	        else
-  61	            supply(aspect, false)
-    	        end
-    	    end
-    	
-  68	    local source = ('%s %s return _process(%s ...) end'):format(
-  34	        'return function (_process, _entity, _entities, _index, ...)',
-  34	        tconcat(cond, ' '),
-  34	        args[1] and (tconcat(args, ', ') .. ', ') or '')
-    	
-  34	    return loadstring(source)()
-    	end
-    	
-    	return function (aspects, process)
-  34	    local invoke = generateProcessInvoker(aspects)
-    	    return function (entities, ...)
-  13	        return traverse(entities, aspects, process, invoke, ...)
-    	    end
-    	end
+   1 local loadstring = _G.loadstring or _G.load
+   1 local tconcat = table.concat
+   1 local type = type
+
+     local function hasSigil (sigil, value)
+ 189     return type(value) == 'string' and sigil:byte() == value:byte()
+     end
+
+     return function (aspects, process)
+  17     local args = {}
+  17     local cond = {}
+  17     local results = {}
+  17     local localIndex = 0
+  17     local choicePattern = '([^|]+)'
+
+         local function suppress (aspect, condition)
+   2         cond[#cond + 1] = 'if nil'
+   4         for option in aspect:gmatch(choicePattern) do
+   2             cond[#cond + 1] = condition:format(option)
+             end
+   2         cond[#cond + 1] = 'then return end'
+         end
+
+         local function supply (aspect, isOptional, isReturned)
+  30         localIndex = localIndex + 1
+  30         cond[#cond + 1] = ('local l%d = nil'):format(localIndex)
+  62         for option in aspect:gmatch(choicePattern) do
+  32             cond[#cond + 1] = ('or _entity[%q]'):format(option)
+             end
+  30         if not isOptional then
+  29             cond[#cond + 1] = ('if not l%d then return end'):format(localIndex)
+             end
+  30         if isReturned then
+   1             results[#results + 1] = ('_entity[%q]'):format(aspect)
+             end
+  30         args[#args + 1] = ('l%d'):format(localIndex)
+         end
+
+  53     for index = 1, #aspects do
+  36         local aspect = aspects[index]
+  36         if hasSigil('_', aspect) then
+   4             args[#args + 1] = aspect
+  32         elseif hasSigil('!', aspect) or hasSigil('~', aspect) then
+   1             suppress(aspect:sub(2), 'or _entity[%q]')
+  31         elseif hasSigil('-', aspect) then
+   1             suppress(aspect:sub(2), 'or not _entity[%q]')
+  30         elseif hasSigil('?', aspect) then
+   1             supply(aspect:sub(2), true)
+  29         elseif hasSigil('=', aspect) then
+   1             supply(aspect:sub(2), false, true)
+             else
+  28             supply(aspect, false)
+             end
+         end
+
+         local source = ([[
+     local _aspects, _process = ...
+     return function (_entity, ...) 
+         %s
+         %s _process(%s ...)
+         return true
+  34 end]]):format(
+  17         tconcat(cond, ' '),
+  17         results[1] and (tconcat(results, ',') .. ' = ') or '',
+  17         args[1] and (tconcat(args, ', ') .. ', ') or '')
+             
+  17     return loadstring(source)(aspects, process)
+     end
+
 
 ==============================================================================
 ./knife/test.lua
 ==============================================================================
-    	local test, testAssert, testError
-    	
-    	-- Create a node representing a test section
-    	local function createNode (parent, description, process)
- 196	    return setmetatable({
-  98	        parent = parent,
-  98	        description = description,
-  98	        process = process,
-  98	        nodes = {},
-  98	        activeNodeIndex = 1,
-  98	        currentNodeIndex = 0,
-  98	        assert = testAssert,
-  98	        error = testError,
- 196	    }, { __call = test })
-    	end
-    	
-    	-- Run a node
-    	local function runNode (node)
- 236	    node.currentNodeIndex = 0
- 236	    return node:process()
-    	end
-    	
-    	-- Get the root node for a given node
-    	local function getRootNode (node)
- 205	    local parent = node.parent
- 205	    return parent and getRootNode(parent) or node
-    	end
-    	
-    	-- Update the active child node of the given node
-    	local function updateActiveNode (node, description, process)
- 138	    local activeNodeIndex = node.activeNodeIndex
- 138	    local nodes = node.nodes
- 138	    local activeNode = nodes[activeNodeIndex]
-    	
- 138	    if not activeNode then
-  85	        activeNode = createNode(node, description, process)
-  85	        nodes[activeNodeIndex] = activeNode
-    	    else
-  53	        activeNode.process = process
-    	    end
-    	
- 138	    getRootNode(node).lastActiveLeaf = activeNode
-    	
- 138	    return activeNode
-    	end
-    	
-    	-- Run the active child node of the given node
-    	local function runActiveNode (node, description, process)
- 138	    local activeNode = updateActiveNode(node, description, process)
- 138	    return runNode(activeNode)
-    	end
-    	
-    	-- Get ancestors of a node, including the node
-    	local function getAncestors (node)
-   2	    local ancestors = { node }
-  14	    for ancestor in function () return node.parent end do
-   5	        ancestors[#ancestors + 1] = ancestor
-   5	        node = ancestor
-    	    end
-   2	    return ancestors
-    	end
-    	
-    	-- Print a message describing one execution path in the test scenario
-    	local function printScenario (node)
-   2	    local ancestors = getAncestors(node)
-   9	    for i = #ancestors, 1, -1 do
-   7	        io.stderr:write(ancestors[i].description or '')
-   7	        io.stderr:write('\n')
-    	    end
-    	end
-    	
-    	-- Print a message and stop the test scenario when an assertion fails
-    	local function failAssert (node, description, message)
-   2	    io.stderr:write(message or '')
-   2	    io.stderr:write('\n\n')
-   2	    printScenario(node)
-   2	    io.stderr:write(description or '')
-   2	    io.stderr:write('\n\n')
-   2	    error(message or '', 2)
-    	end
-    	
-    	-- Create a branch node for a test scenario
-    	test = function (node, description, process)
- 658	    node.currentNodeIndex = node.currentNodeIndex + 1
- 658	    if node.currentNodeIndex == node.activeNodeIndex then
- 138	        return runActiveNode(node, description, process)
-    	    end
-    	end
-    	
-    	-- Test an assertion
-    	testAssert = function (self, value, description)
- 247	    if not value then
-   1	        return failAssert(self, description, 'Test failed: assertion failed')
-    	    end
- 246	    return value
-    	end
-    	
-    	-- Expect function f to fail
-    	testError = function (self, f, description)
-  15	    if pcall(f) then
-   1	        return failAssert(self, description, 'Test failed: expected error')
-    	    end
-    	end
-    	
-    	-- Create the root node for a test scenario
-    	local function T (description, process)
-  13	    local root = createNode(nil, description, process)
-    	
-  13	    runNode(root)
-  98	    while root.activeNodeIndex <= #root.nodes do
-  85	        local lastActiveBranch = root.lastActiveLeaf.parent
-  85	        lastActiveBranch.activeNodeIndex = lastActiveBranch.activeNodeIndex + 1
-  85	        runNode(root)
-    	    end
-    	
-  13	    return root
-    	end
-    	
-    	-- Run any other files passed from CLI.
-   1	if arg and arg[0] and arg[0]:gmatch('test.lua') then
-   1	    _G.T = T
-  12	    for i = 1, #arg do
-  11	        dofile(arg[i])
-    	    end
-   1	    _G.T = nil
-    	end
-    	
-   1	return T
+     local test, testAssert, testError
+
+     -- Create a node representing a test section
+     local function createNode (parent, description, process)
+ 190     return setmetatable({
+  95         parent = parent,
+  95         description = description,
+  95         process = process,
+  95         nodes = {},
+  95         activeNodeIndex = 1,
+  95         currentNodeIndex = 0,
+  95         assert = testAssert,
+  95         error = testError,
+ 190     }, { __call = test })
+     end
+
+     -- Run a node
+     local function runNode (node)
+ 230     node.currentNodeIndex = 0
+ 230     return node:process()
+     end
+
+     -- Get the root node for a given node
+     local function getRootNode (node)
+ 202     local parent = node.parent
+ 202     return parent and getRootNode(parent) or node
+     end
+
+     -- Update the active child node of the given node
+     local function updateActiveNode (node, description, process)
+ 135     local activeNodeIndex = node.activeNodeIndex
+ 135     local nodes = node.nodes
+ 135     local activeNode = nodes[activeNodeIndex]
+
+ 135     if not activeNode then
+  82         activeNode = createNode(node, description, process)
+  82         nodes[activeNodeIndex] = activeNode
+         else
+  53         activeNode.process = process
+         end
+
+ 135     getRootNode(node).lastActiveLeaf = activeNode
+
+ 135     return activeNode
+     end
+
+     -- Run the active child node of the given node
+     local function runActiveNode (node, description, process)
+ 135     local activeNode = updateActiveNode(node, description, process)
+ 135     return runNode(activeNode)
+     end
+
+     -- Get ancestors of a node, including the node
+     local function getAncestors (node)
+   2     local ancestors = { node }
+  14     for ancestor in function () return node.parent end do
+   5         ancestors[#ancestors + 1] = ancestor
+   5         node = ancestor
+         end
+   2     return ancestors
+     end
+
+     -- Print a message describing one execution path in the test scenario
+     local function printScenario (node)
+   2     local ancestors = getAncestors(node)
+   9     for i = #ancestors, 1, -1 do
+   7         io.stderr:write(ancestors[i].description or '')
+   7         io.stderr:write('\n')
+         end
+     end
+
+     -- Print a message and stop the test scenario when an assertion fails
+     local function failAssert (node, description, message)
+   2     io.stderr:write(message or '')
+   2     io.stderr:write('\n\n')
+   2     printScenario(node)
+   2     io.stderr:write(description or '')
+   2     io.stderr:write('\n\n')
+   2     error(message or '', 2)
+     end
+
+     -- Create a branch node for a test scenario
+     test = function (node, description, process)
+ 598     node.currentNodeIndex = node.currentNodeIndex + 1
+ 598     if node.currentNodeIndex == node.activeNodeIndex then
+ 135         return runActiveNode(node, description, process)
+         end
+     end
+
+     -- Test an assertion
+     testAssert = function (self, value, description)
+ 245     if not value then
+   1         return failAssert(self, description, 'Test failed: assertion failed')
+         end
+ 244     return value
+     end
+
+     -- Expect function f to fail
+     testError = function (self, f, description)
+  14     if pcall(f) then
+   1         return failAssert(self, description, 'Test failed: expected error')
+         end
+     end
+
+     -- Create the root node for a test scenario
+     local function T (description, process)
+  13     local root = createNode(nil, description, process)
+
+  13     runNode(root)
+  95     while root.activeNodeIndex <= #root.nodes do
+  82         local lastActiveBranch = root.lastActiveLeaf.parent
+  82         lastActiveBranch.activeNodeIndex = lastActiveBranch.activeNodeIndex + 1
+  82         runNode(root)
+         end
+
+  13     return root
+     end
+
+     -- Run any other files passed from CLI.
+   1 if arg and arg[0] and arg[0]:gmatch('test.lua') then
+   1     _G.T = T
+  12     for i = 1, #arg do
+  11         dofile(arg[i])
+         end
+   1     _G.T = nil
+     end
+
+   1 return T
 
 ==============================================================================
 ./knife/timer.lua
 ==============================================================================
-   1	local Timer = {}
-    	
-    	-- group management
-    	
-    	local function detach (group, item)
-  17	    local index = item.index
-    	
-  17	    group[index] = group[#group]
-  17	    group[index].index = index
-  17	    group[#group] = nil
-  17	    item.groupField = nil
-    	end
-    	
-    	local function attach (group, item)
-  22	    if item.groupField then
-   9	        detach (item.groupField, item)
-    	    end
-    	
-  22	    local index = #group + 1
-    	
-  22	    item.index = index
-  22	    group[index] = item
-  22	    item.groupField = group
-  22	    item.lastGroup = group
-    	end
-    	
-    	-- instance update methods
-    	
-    	local function updateContinuous (self, dt)
-   3	    local cutoff = self.cutoff
-   3	    local elapsed = self.elapsed + dt
-    	
-   3	    if self:callback(dt) == false or elapsed >= cutoff then
-   1	        if self.finishField then
-   1	            self:finishField(elapsed - cutoff)
-    	        end
-   1	        self:remove()
-    	    end
-    	
-   3	    self.elapsed = elapsed
-    	
-   3	    return
-    	end
-    	
-    	local function updateIntermittent (self, dt)
-   6	    local duration = self.delay or self.interval
-   6	    local elapsed = self.elapsed + dt
-    	
-   9	    while elapsed >= duration do
-   7	        elapsed = elapsed - duration
-   7	        if self.limitField then
-   4	            self.limitField = self.limitField - 1
-    	        end
-   7	        if self:callback(elapsed) == false
-   7	        or self.delay or self.limitField == 0 then
-   4	            if self.finishField then
-   1	                self:finishField(elapsed)
-    	            end
-   4	            self:remove()
-   4	            return
-    	        end
-    	    end
-    	
-   2	    self.elapsed = elapsed
-    	end
-    	
-    	local function updateTween (self, dt)
-  11	    local elapsed = self.elapsed + dt
-  11	    local plan = self.plan
-  11	    local duration = self.duration
-    	
-  11	    self.elapsed = elapsed
-    	
-  11	    if elapsed >= duration then
-   3	        for index = 1, #plan do
-   2	            local task = plan[index]
-    	
-   2	            task.target[task.key] = task.final
-    	        end
-   1	        if self.finishField then
-   1	            self:finishField(elapsed - duration)
-    	        end
-   1	        self:remove()
-   1	        return
-    	    end
-    	
-  10	    local ease = self.easeField
-    	
-  30	    for index = 1, #plan do
-  20	        local task = plan[index]
-  20	        local target, key = task.target, task.key
-  20	        local initial, change = task.initial, task.change
-    	
-  20	        target[key] = ease(elapsed, initial, change, duration)
-    	    end
-    	
-    	end
-    	
-    	-- shared instance methods
-    	
-   1	local defaultGroup = {}
-    	
-    	local function group (self, group)
-  11	    if not group then
-   2	        group = defaultGroup
-    	    end
-    	
-  11	    attach(group, self)
-    	
-  11	    return self
-    	end
-    	
-    	local function remove (self)
-   8	    if self.groupField then
-   8	        detach(self.groupField, self)
-    	    end
-    	
-   8	    return self
-    	end
-    	
-    	local function register (self)
-   1	    attach(self.lastGroup, self)
-    	
-   1	    return self
-    	end
-    	
-    	local function limit (self, limitField)
-   1	    self.limitField = limitField
-    	
-   1	    return self
-    	end
-    	
-    	local function finish (self, finishField)
-   6	    self.finishField = finishField
-    	
-   6	    return self
-    	end
-    	
-    	local function ease (self, easeField)
-   4	    self.easeField = easeField
-    	
-   4	    return self
-    	end
-    	
-    	-- tweening helper functions
-    	
-    	local function planTween (definition)
-   5	    local plan = {}
-    	
-  10	    for target, values in pairs(definition) do
-  15	        for key, final in pairs(values) do
-  10	            local initial = target[key]
-    	
-  10	            plan[#plan + 1] = {
-  10	                target = target,
-  10	                key = key,
-  10	                initial = initial,
-  10	                final = final,
-  10	                change = final - initial,
-  10	            }
-    	        end
-    	    end
-    	
-   5	    return plan
-    	end
-    	
-    	local function easeLinear (elapsed, initial, change, duration)
-   2	    return change * elapsed / duration + initial
-    	end
-    	
-    	-- instance initializer
-    	
-    	local function initialize (timer)
-  10	    timer.elapsed = 0
-  10	    timer.group = group
-  10	    timer.remove = remove
-  10	    timer.register = register
-    	
-  10	    attach(defaultGroup, timer)
-    	
-  10	    return timer
-    	end
-    	
-    	-- static api
-    	
-   1	function Timer.after (delay, callback)
-   6	    return initialize {
-   3	        delay = delay,
-   3	        callback = callback,
-   3	        update = updateIntermittent,
-    	    }
-    	end
-    	
-   1	function Timer.every (interval, callback)
-   2	    return initialize {
-   1	        interval = interval,
-   1	        callback = callback,
-   1	        update = updateIntermittent,
-   1	        limit = limit,
-   1	        finish = finish,
-    	     }
-    	end
-    	
-   1	function Timer.prior (cutoff, callback)
-   2	    return initialize {
-   1	        cutoff = cutoff,
-   1	        callback = callback,
-   1	        update = updateContinuous,
-   1	        finish = finish,
-    	    }
-    	end
-    	
-   1	function Timer.tween (duration, definition)
-  10	    return initialize {
-   5	        duration = duration,
-   5	        plan = planTween(definition),
-   5	        update = updateTween,
-   5	        easeField = easeLinear,
-   5	        ease = ease,
-   5	        finish = finish,
-    	    }
-    	end
-    	
-   1	function Timer.update (dt, group)
-  25	    if not group then
-   1	        group = defaultGroup
-    	    end
-  45	    for index = #group, 1, -1 do
-  20	        group[index]:update(dt)
-    	    end
-    	end
-    	
-   1	function Timer.clear (group)
-   1	    if not group then
-   1	        group = defaultGroup
-    	    end
-   2	    for i = 1, #group do
-   1	        group[i] = nil
-    	    end
-    	end
-    	
-   1	Timer.defaultGroup = defaultGroup
-    	
-   1	return Timer
+   1 local Timer = {}
+
+     -- group management
+
+     local function detach (group, item)
+  17     local index = item.index
+
+  17     group[index] = group[#group]
+  17     group[index].index = index
+  17     group[#group] = nil
+  17     item.groupField = nil
+     end
+
+     local function attach (group, item)
+  22     if item.groupField then
+   9         detach (item.groupField, item)
+         end
+
+  22     local index = #group + 1
+
+  22     item.index = index
+  22     group[index] = item
+  22     item.groupField = group
+  22     item.lastGroup = group
+     end
+
+     -- instance update methods
+
+     local function updateContinuous (self, dt)
+   3     local cutoff = self.cutoff
+   3     local elapsed = self.elapsed + dt
+
+   3     if self:callback(dt) == false or elapsed >= cutoff then
+   1         if self.finishField then
+   1             self:finishField(elapsed - cutoff)
+             end
+   1         self:remove()
+         end
+
+   3     self.elapsed = elapsed
+
+   3     return
+     end
+
+     local function updateIntermittent (self, dt)
+   6     local duration = self.delay or self.interval
+   6     local elapsed = self.elapsed + dt
+
+   9     while elapsed >= duration do
+   7         elapsed = elapsed - duration
+   7         if self.limitField then
+   4             self.limitField = self.limitField - 1
+             end
+   7         if self:callback(elapsed) == false
+   7         or self.delay or self.limitField == 0 then
+   4             if self.finishField then
+   1                 self:finishField(elapsed)
+                 end
+   4             self:remove()
+   4             return
+             end
+         end
+
+   2     self.elapsed = elapsed
+     end
+
+     local function updateTween (self, dt)
+  11     local elapsed = self.elapsed + dt
+  11     local plan = self.plan
+  11     local duration = self.duration
+
+  11     self.elapsed = elapsed
+
+  11     if elapsed >= duration then
+   3         for index = 1, #plan do
+   2             local task = plan[index]
+
+   2             task.target[task.key] = task.final
+             end
+   1         if self.finishField then
+   1             self:finishField(elapsed - duration)
+             end
+   1         self:remove()
+   1         return
+         end
+
+  10     local ease = self.easeField
+
+  30     for index = 1, #plan do
+  20         local task = plan[index]
+  20         local target, key = task.target, task.key
+  20         local initial, change = task.initial, task.change
+
+  20         target[key] = ease(elapsed, initial, change, duration)
+         end
+
+     end
+
+     -- shared instance methods
+
+   1 local defaultGroup = {}
+
+     local function group (self, group)
+  11     if not group then
+   2         group = defaultGroup
+         end
+
+  11     attach(group, self)
+
+  11     return self
+     end
+
+     local function remove (self)
+   8     if self.groupField then
+   8         detach(self.groupField, self)
+         end
+
+   8     return self
+     end
+
+     local function register (self)
+   1     attach(self.lastGroup, self)
+
+   1     return self
+     end
+
+     local function limit (self, limitField)
+   1     self.limitField = limitField
+
+   1     return self
+     end
+
+     local function finish (self, finishField)
+   6     self.finishField = finishField
+
+   6     return self
+     end
+
+     local function ease (self, easeField)
+   4     self.easeField = easeField
+
+   4     return self
+     end
+
+     -- tweening helper functions
+
+     local function planTween (definition)
+   5     local plan = {}
+
+  10     for target, values in pairs(definition) do
+  15         for key, final in pairs(values) do
+  10             local initial = target[key]
+
+  10             plan[#plan + 1] = {
+  10                 target = target,
+  10                 key = key,
+  10                 initial = initial,
+  10                 final = final,
+  10                 change = final - initial,
+  10             }
+             end
+         end
+
+   5     return plan
+     end
+
+     local function easeLinear (elapsed, initial, change, duration)
+   2     return change * elapsed / duration + initial
+     end
+
+     -- instance initializer
+
+     local function initialize (timer)
+  10     timer.elapsed = 0
+  10     timer.group = group
+  10     timer.remove = remove
+  10     timer.register = register
+
+  10     attach(defaultGroup, timer)
+
+  10     return timer
+     end
+
+     -- static api
+
+   1 function Timer.after (delay, callback)
+   6     return initialize {
+   3         delay = delay,
+   3         callback = callback,
+   3         update = updateIntermittent,
+         }
+     end
+
+   1 function Timer.every (interval, callback)
+   2     return initialize {
+   1         interval = interval,
+   1         callback = callback,
+   1         update = updateIntermittent,
+   1         limit = limit,
+   1         finish = finish,
+          }
+     end
+
+   1 function Timer.prior (cutoff, callback)
+   2     return initialize {
+   1         cutoff = cutoff,
+   1         callback = callback,
+   1         update = updateContinuous,
+   1         finish = finish,
+         }
+     end
+
+   1 function Timer.tween (duration, definition)
+  10     return initialize {
+   5         duration = duration,
+   5         plan = planTween(definition),
+   5         update = updateTween,
+   5         easeField = easeLinear,
+   5         ease = ease,
+   5         finish = finish,
+         }
+     end
+
+   1 function Timer.update (dt, group)
+  25     if not group then
+   1         group = defaultGroup
+         end
+  45     for index = #group, 1, -1 do
+  20         group[index]:update(dt)
+         end
+     end
+
+   1 function Timer.clear (group)
+   1     if not group then
+   1         group = defaultGroup
+         end
+   2     for i = 1, #group do
+   1         group[i] = nil
+         end
+     end
+
+   1 Timer.defaultGroup = defaultGroup
+
+   1 return Timer
 
 ==============================================================================
 ./spec/base.lua
 ==============================================================================
-    	local function checkSubSuper (T, Sub, Super)
-  52	  T:assert(getmetatable(Sub).__index == Super, 
-  26	  'Then the super is the index for the sub')
-  52	  T:assert(Sub ~= Super,
-  26	  'Then the super is not identical to the sub')
-    	end
-    	
-    	local function checkNotCallable (T, instance)
-  24	  T:error(function () instance() end, 
-   8	  'Then the instance is not callable')
-    	end
-    	
-    	local function checkConstruct (T, Class)
-  36	  T('When instantiated with the default constructor', 
-    	  function (T)
-   4	    Class.constructor = nil
-   4	    local c = Class()
-   4	    checkSubSuper(T, c, Class)
-   4	    checkNotCallable (T, c)
-    	  end)
-  36	  T('When instantiated with a custom constructor', 
-    	  function (T)
-   8	    function Class:constructor (x) self.x = x; return x, 45 end
-   4	    local c, x, y = Class(123)
-   8	    T:assert(c.x == 123,
-   4	    'Then the constructor is applied to the instance')
-   8	    T:assert(x == 123 and y == 45,
-   4	    'Then return values from the constructor follow the instance')
-   4	    checkSubSuper(T, c, Class)
-   4	    checkNotCallable (T, c)
-    	  end)
-    	end
-    	
-    	local function checkExtend (T, Class)
-  24	  T('When a class is extended', 
-    	  function (T)
-   6	    local Sub = Class:extend()
-   6	    checkSubSuper(T, Sub, Class)
-   6	    checkConstruct(T, Sub)
-    	  end)
-    	end
-    	
-   2	T('Given a base class', 
-    	function (T)
-  13	  local Base = require 'knife.base'
-  26	  T('When the base class is extended with no arguments', 
-    	  function (T)
-   6	    local Thing = Base:extend()
-   6	    checkSubSuper(T, Thing, Base)
-   6	    checkConstruct(T, Thing)
-   6	    checkExtend (T, Thing)
-    	  end)
-  26	  T('When the base class is extended with a table argument', 
-    	  function (T)
-   6	    local t = { x = 1 }
-   6	    local Thing = Base:extend(t)
-  12	    T:assert(Thing == t,
-   6	    'Then the new class is identical to the table')
-   6	    checkSubSuper(T, Thing, Base)
-   6	    checkConstruct(T, Thing)
-   6	    checkExtend (T, Thing)
-    	  end)
-    	end)
-    	
+     local function checkSubSuper (T, Sub, Super)
+  52   T:assert(getmetatable(Sub).__index == Super,
+  26   'Then the super is the index for the sub')
+  52   T:assert(Sub ~= Super,
+  26   'Then the super is not identical to the sub')
+     end
+
+     local function checkNotCallable (T, instance)
+  24   T:error(function () instance() end,
+   8   'Then the instance is not callable')
+     end
+
+     local function checkConstruct (T, Class)
+  36   T('When instantiated with the default constructor',
+       function (T)
+   4     Class.constructor = nil
+   4     local c = Class()
+   4     checkSubSuper(T, c, Class)
+   4     checkNotCallable (T, c)
+       end)
+  36   T('When instantiated with a custom constructor',
+       function (T)
+   8     function Class:constructor (x) self.x = x; return x, 45 end
+   4     local c, x, y = Class(123)
+   8     T:assert(c.x == 123,
+   4     'Then the constructor is applied to the instance')
+   8     T:assert(x == 123 and y == 45,
+   4     'Then return values from the constructor follow the instance')
+   4     checkSubSuper(T, c, Class)
+   4     checkNotCallable (T, c)
+       end)
+     end
+
+     local function checkExtend (T, Class)
+  24   T('When a class is extended',
+       function (T)
+   6     local Sub = Class:extend()
+   6     checkSubSuper(T, Sub, Class)
+   6     checkConstruct(T, Sub)
+       end)
+     end
+
+   2 T('Given a base class',
+     function (T)
+  13   local Base = require 'knife.base'
+  26   T('When the base class is extended with no arguments',
+       function (T)
+   6     local Thing = Base:extend()
+   6     checkSubSuper(T, Thing, Base)
+   6     checkConstruct(T, Thing)
+   6     checkExtend (T, Thing)
+       end)
+  26   T('When the base class is extended with a table argument',
+       function (T)
+   6     local t = { x = 1 }
+   6     local Thing = Base:extend(t)
+  12     T:assert(Thing == t,
+   6     'Then the new class is identical to the table')
+   6     checkSubSuper(T, Thing, Base)
+   6     checkConstruct(T, Thing)
+   6     checkExtend (T, Thing)
+       end)
+     end)
 
 ==============================================================================
 ./spec/behavior.lua
 ==============================================================================
-   2	T('Given some states', function (T)
-    	
-   6	    local Behavior = require 'knife.behavior'
-    	
-   6	    local thought = false
-    	
-    	    local function think (behavior, subject)
-   2	        thought = true
-    	    end
-    	
-   6	    local states = {
-   6	        default = {
-   6	            { sprite = 'human.idle.a', duration = 1, after = 'idle' },
-   6	        },
-   6	        idle = {
-   6	            { sprite = 'human.idle.a', duration = 3 },
-   6	            { sprite = 'human.idle.b', duration = 1 },
-   6	            { sprite = 'human.idle.a', duration = 2 },
-   6	            { sprite = 'human.idle.c', duration = 1, action = think },
-   6	        },
-   6	        walk = {
-   6	            { sprite = 'human.run.a', duration = 0.2 },
-   6	            { sprite = 'human.run.b', duration = 0.2 },
-   6	            { sprite = 'human.run.c', duration = 0.2 },
-   6	            { sprite = 'human.run.b', duration = 0.2 },
-   6	        },
-    	    }
-    	
-  12	    T('When a behavior is created', function (T)
-   5	        local subject = {}
-   5	        local behavior = Behavior(states, subject)
-   5	        local frame = behavior.frame
-  10	        T:assert(frame,
-   5	        'Then the behavior has a current frame')
-    	
-  10	        T('When the behavior is updated by a small dt', function (T)
-   1	            behavior:update(0.5)
-   2	            T:assert(behavior.frame == frame,
-   1	            'Then the behavior has the same frame')
-    	        end)
-    	
-  10	        T('When the behavior is updated by a larger dt', function (T)
-   1	            behavior:update(2)
-   2	            T:assert(behavior.frame ~= frame,
-   1	            'Then the behavior has a new frame')
-    	        end)
-    	
-  10	        T('When the behavior encounters an action', function (T)
-   1	            assert(thought == false)
-   1	            behavior:update(20)
-   2	            T:assert(thought == true,
-   1	            'Then the action executes')
-    	        end)
-    	
-  10	        T('When the behavior is set to a state', function (T)
-   1	            behavior:setState('walk', 2)
-   2	            T:assert(behavior.frame == states.walk[2],
-   1	            'Then the frame is set accordingly')
-    	        end)
-    	
-    	    end)
-    	
-    	end)
+   2 T('Given some states', function (T)
+
+   6     local Behavior = require 'knife.behavior'
+
+   6     local thought = false
+
+         local function think (behavior, subject)
+   2         thought = true
+         end
+
+   6     local states = {
+   6         default = {
+   6             { sprite = 'human.idle.a', duration = 1, after = 'idle' },
+   6         },
+   6         idle = {
+   6             { sprite = 'human.idle.a', duration = 3 },
+   6             { sprite = 'human.idle.b', duration = 1 },
+   6             { sprite = 'human.idle.a', duration = 2 },
+   6             { sprite = 'human.idle.c', duration = 1, action = think },
+   6         },
+   6         walk = {
+   6             { sprite = 'human.run.a', duration = 0.2 },
+   6             { sprite = 'human.run.b', duration = 0.2 },
+   6             { sprite = 'human.run.c', duration = 0.2 },
+   6             { sprite = 'human.run.b', duration = 0.2 },
+   6         },
+         }
+
+  12     T('When a behavior is created', function (T)
+   5         local subject = {}
+   5         local behavior = Behavior(states, subject)
+   5         local frame = behavior.frame
+  10         T:assert(frame,
+   5         'Then the behavior has a current frame')
+
+  10         T('When the behavior is updated by a small dt', function (T)
+   1             behavior:update(0.5)
+   2             T:assert(behavior.frame == frame,
+   1             'Then the behavior has the same frame')
+             end)
+
+  10         T('When the behavior is updated by a larger dt', function (T)
+   1             behavior:update(2)
+   2             T:assert(behavior.frame ~= frame,
+   1             'Then the behavior has a new frame')
+             end)
+
+  10         T('When the behavior encounters an action', function (T)
+   1             assert(thought == false)
+   1             behavior:update(20)
+   2             T:assert(thought == true,
+   1             'Then the action executes')
+             end)
+
+  10         T('When the behavior is set to a state', function (T)
+   1             behavior:setState('walk', 2)
+   2             T:assert(behavior.frame == states.walk[2],
+   1             'Then the frame is set accordingly')
+             end)
+
+         end)
+
+     end)
 
 ==============================================================================
 ./spec/bind.lua
 ==============================================================================
-   2	T('Given a function to bind', function (T)
-    	
-   4	    local Bind = require 'knife.bind'
-    	
-    	    local a, b, c, d, e
-    	
-    	    local function doStuff (arg1, arg2, arg3, arg4)
-   3	        a, b, c, d = arg1, arg2, arg3, arg4
-   3	        e = 5
-    	    end
-    	
-   8	    T('When bound and executed', function (T)
-   1	        local bound = Bind(doStuff, 1, 2)
-   1	        assert(a == nil and b == nil and c == nil and d == nil)
-   1	        bound()
-   2	        T:assert(a == 1 and b == 2 and c == nil,
-   1	        'Then arguments were bound correctly')
-    	    end)
-    	
-   8	    T('When bound and executed with more args', function (T)
-   1	        local bound = Bind(doStuff, 1, 2)
-   1	        assert(a == nil and b == nil and c == nil and d == nil)
-   1	        bound(3, 4)
-   2	        T:assert(a == 1 and b == 2 and c == 3 and d == 4,
-   1	        'Then arguments were bound correctly')
-    	    end)
-    	
-   8	    T('When bound with no args and executed', function (T)
-   1	        local bound = Bind(doStuff)
-   1	        assert(e == nil)
-   1	        bound()
-   2	        T:assert(e == 5,
-   1	        'Then bound function works correctly')
-    	    end)
-    	
-    	end)
+   2 T('Given a function to bind', function (T)
+
+   4     local Bind = require 'knife.bind'
+
+         local a, b, c, d, e
+
+         local function doStuff (arg1, arg2, arg3, arg4)
+   3         a, b, c, d = arg1, arg2, arg3, arg4
+   3         e = 5
+         end
+
+   8     T('When bound and executed', function (T)
+   1         local bound = Bind(doStuff, 1, 2)
+   1         assert(a == nil and b == nil and c == nil and d == nil)
+   1         bound()
+   2         T:assert(a == 1 and b == 2 and c == nil,
+   1         'Then arguments were bound correctly')
+         end)
+
+   8     T('When bound and executed with more args', function (T)
+   1         local bound = Bind(doStuff, 1, 2)
+   1         assert(a == nil and b == nil and c == nil and d == nil)
+   1         bound(3, 4)
+   2         T:assert(a == 1 and b == 2 and c == 3 and d == 4,
+   1         'Then arguments were bound correctly')
+         end)
+
+   8     T('When bound with no args and executed', function (T)
+   1         local bound = Bind(doStuff)
+   1         assert(e == nil)
+   1         bound()
+   2         T:assert(e == 5,
+   1         'Then bound function works correctly')
+         end)
+
+     end)
 
 ==============================================================================
 ./spec/chain.lua
 ==============================================================================
-   2	T('Given a function taking a callback', function (T)
-    	
-   6	    local Chain = require 'knife.chain'
-    	
-    	    local function doStuff (a, b, callback)
-   1	        callback(a, b)
-    	    end
-    	    
-   6	    local invoke = {}
-    	    
-    	    local function funcThatReturnsChain (x)
-   6	        local chain = Chain(function (go) go(x * 2) end)
-   6	        invoke[#invoke + 1] = function () chain() end
-   3	        return chain
-    	    end
-    	    
-  12	    T('When multiple functions are linked to a chain', function (T)
-   2	        local c = Chain(
-    	            function (go, x)
-   1	                T:assert(x == 123, 'Then args are passed')
-   1	                go(456)
-    	            end,
-    	            function (go, x)
-   1	                T:assert(x == 456, 'Then args are passed x2')
-   1	                go(111)
-    	            end
-    	        )
-   2	        c(
-    	            function (go, x)
-   1	                T:assert(x == 111, 'Then args are passed x3')
-   1	                go(222)
-    	            end,
-    	            function (go, x)
-   1	                T:assert(x == 222, 'Then args are passed x4')
-    	            end
-    	        )
-   1	        c(nil, 123)
-    	    end)
-    	    
-  12	    T('When a function that returns a chain is called', function (T)
-   2	        funcThatReturnsChain(123)(function (go, x)
-   1	            T:assert(x == 246, 'Then args are passed')
-   1	            return funcThatReturnsChain(33)
-   2	        end)(function (go, x)
-   1	            T:assert(x == 66, 'Then more chains can be returned')
-   1	            return funcThatReturnsChain(321)
-   2	        end)(function (go, x)
-   1	            T:assert(x == 642, 'Then more chains can be returned x2')
-   1	            go(111)
-   3	        end)(function (go, x)
-   1	            T:assert(x == 111, 'Then continue function still works')
-    	        end)
-   4	        for _, f in ipairs(invoke) do
-   3	            f()
-    	        end
-    	    end)
-    	
-  12	    T('When Chain factory is called', function (T)
-    	
-   6	        local c1 = Chain(function (go)
-   1	            doStuff(2, 3, go)
-    	        end)
-    	
-   6	        T:assert(type(c1) == 'function',
-   3	        'Then a chain is created')
-    	
-   6	        T('When the chain is invoked with a function arg', function (T)
-    	
-    	            local resultA, resultB
-    	
-   4	            local c2 = c1(function (go, a, b)
-   1	                resultA = a
-   1	                resultB = b
-   1	                go()
-    	            end)
-    	
-   4	            T:assert(type(c2) == 'function' and c1 == c2,
-   2	            'Then the chain is extended')
-    	
-   4	            T('When the chain is invoked with no args', function (T)
-    	
-   1	                c2()
-    	
-   2	                T:assert(resultA == 2 and resultB == 3,
-   1	                'Then the chain is executed')
-    	
-    	            end)
-    	
-    	        end)
-    	
-    	    end)
-    	
-    	end)
+   2 T('Given a function taking a callback', function (T)
+
+   6     local Chain = require 'knife.chain'
+
+         local function doStuff (a, b, callback)
+   1         callback(a, b)
+         end
+         
+   6     local invoke = {}
+         
+         local function funcThatReturnsChain (x)
+   6         local chain = Chain(function (go) go(x * 2) end)
+   6         invoke[#invoke + 1] = function () chain() end
+   3         return chain
+         end
+         
+  12     T('When multiple functions are linked to a chain', function (T)
+   2         local c = Chain(
+                 function (go, x)
+   1                 T:assert(x == 123, 'Then args are passed')
+   1                 go(456)
+                 end,
+                 function (go, x)
+   1                 T:assert(x == 456, 'Then args are passed x2')
+   1                 go(111)
+                 end
+             )
+   2         c(
+                 function (go, x)
+   1                 T:assert(x == 111, 'Then args are passed x3')
+   1                 go(222)
+                 end,
+                 function (go, x)
+   1                 T:assert(x == 222, 'Then args are passed x4')
+                 end
+             )
+   1         c(nil, 123)
+         end)
+         
+  12     T('When a function that returns a chain is called', function (T)
+   2         funcThatReturnsChain(123)(function (go, x)
+   1             T:assert(x == 246, 'Then args are passed')
+   1             return funcThatReturnsChain(33)
+   2         end)(function (go, x)
+   1             T:assert(x == 66, 'Then more chains can be returned')
+   1             return funcThatReturnsChain(321)
+   2         end)(function (go, x)
+   1             T:assert(x == 642, 'Then more chains can be returned x2')
+   1             go(111)
+   3         end)(function (go, x)
+   1             T:assert(x == 111, 'Then continue function still works')
+             end)
+   4         for _, f in ipairs(invoke) do
+   3             f()
+             end
+         end)
+
+  12     T('When Chain factory is called', function (T)
+
+   6         local c1 = Chain(function (go)
+   1             doStuff(2, 3, go)
+             end)
+
+   6         T:assert(type(c1) == 'function',
+   3         'Then a chain is created')
+
+   6         T('When the chain is invoked with a function arg', function (T)
+
+                 local resultA, resultB
+
+   4             local c2 = c1(function (go, a, b)
+   1                 resultA = a
+   1                 resultB = b
+   1                 go()
+                 end)
+
+   4             T:assert(type(c2) == 'function' and c1 == c2,
+   2             'Then the chain is extended')
+
+   4             T('When the chain is invoked with no args', function (T)
+
+   1                 c2()
+
+   2                 T:assert(resultA == 2 and resultB == 3,
+   1                 'Then the chain is executed')
+
+                 end)
+
+             end)
+
+         end)
+
+     end)
 
 ==============================================================================
 ./spec/convoke.lua
 ==============================================================================
-   2	T('Given convoke', function (T)
-   5	    local Convoke = require 'knife.convoke'
-    	
-   5	    local cb = {}
-    	
-    	    local function go ()
-  13	        for k, v in ipairs(cb) do
-   8	            v()
-    	        end
-   5	        cb = {}
-    	    end
-    	
-    	    local function doStuff (arg1, arg2, callback)
-   8	        cb[#cb + 1] = function ()
-   8	            callback(arg1, arg2)
-    	        end
-    	    end
-    	
-  10	    T('When invoked with a callback', function (T)
-   2	        Convoke(function (continue, wait)
-   1	            doStuff(123, 456, continue())
-   1	            local r1, r2 = wait()
-   2	            T:assert(r1 == 123 and r2 == 456,
-   1	            'Then "wait" returns arguments passed to contination function')
-    	
-   1	            doStuff(234, 345, continue())
-   1	            local r1, r2 = wait()
-   2	            T:assert(r1 == 234 and r2 == 345,
-   1	            'Then "wait" returns arguments passed to contination function x2')
-   3	        end)()
-    	
-   1	        go()
-    	    end)
-    	
-  10	    T('When multiple continues are present', function (T)
-   2	        Convoke(function (continue, wait)
-   1	            doStuff(123, 456, continue())
-   1	            doStuff(234, 345, continue())
-   1	            local r1, r2 = wait()
-   2	            T:assert(r1 == 234 and r2 == 345,
-   1	            'Then "wait" returns arguments from last invoked contination')
-   3	        end)()
-    	
-   1	        go()
-    	    end)
-    	
-  10	    T('When invoked with multiple callbacks', function (T)
-   2	        Convoke(function (continue, wait)
-   1	            doStuff(123, 456, continue())
-   1	            local r1, r2 = wait()
-   2	            T:assert(r1 == 123 and r2 == 456,
-   1	            'Then "wait" returns arguments passed to contination function')
-   3	        end)(function (continue, wait)
-   1	            doStuff(234, 345, continue())
-   1	            local r1, r2 = wait()
-   2	            T:assert(r1 == 234 and r2 == 345,
-   1	            'Then "wait" returns arguments passed to contination function x2')
-   3	        end)()
-    	
-   1	        go()
-    	    end)
-    	
-  10	    T('When invoked with a callback after running', function (T)
-    	        local foo
-    	
-   2	        local c = Convoke(function (continue, wait)
-   1	            doStuff(123, 456, continue())
-   1	            local r1, r2 = wait()
-   2	            T:assert(r1 == 123 and r2 == 456,
-   1	            'Then "wait" returns arguments passed to contination function')
-   1	            foo = 1
-    	        end)
-    	
-   1	        c()
-   1	        go()
-    	
-   1	        T:assert(foo == 1, 'Then the first callback runs')
-    	
-   2	        c(function (continue, wait)
-   1	            doStuff(234, 345, continue())
-   1	            local r1, r2 = wait()
-   2	            T:assert(r1 == 234 and r2 == 345,
-   1	            'Then "wait" returns arguments passed to contination function x2')
-   1	            foo = 2
-    	        end)
-    	
-   1	        go()
-    	
-   1	        T:assert(foo == 2, 'Then the second callback runs')
-    	    end)
-    	
-    	end)
+   2 T('Given convoke', function (T)
+   5     local Convoke = require 'knife.convoke'
+
+   5     local cb = {}
+
+         local function go ()
+  13         for k, v in ipairs(cb) do
+   8             v()
+             end
+   5         cb = {}
+         end
+
+         local function doStuff (arg1, arg2, callback)
+   8         cb[#cb + 1] = function ()
+   8             callback(arg1, arg2)
+             end
+         end
+
+  10     T('When invoked with a callback', function (T)
+   2         Convoke(function (continue, wait)
+   1             doStuff(123, 456, continue())
+   1             local r1, r2 = wait()
+   2             T:assert(r1 == 123 and r2 == 456,
+   1             'Then "wait" returns arguments passed to contination function')
+
+   1             doStuff(234, 345, continue())
+   1             local r1, r2 = wait()
+   2             T:assert(r1 == 234 and r2 == 345,
+   1             'Then "wait" returns arguments passed to contination function x2')
+   3         end)()
+
+   1         go()
+         end)
+
+  10     T('When multiple continues are present', function (T)
+   2         Convoke(function (continue, wait)
+   1             doStuff(123, 456, continue())
+   1             doStuff(234, 345, continue())
+   1             local r1, r2 = wait()
+   2             T:assert(r1 == 234 and r2 == 345,
+   1             'Then "wait" returns arguments from last invoked contination')
+   3         end)()
+
+   1         go()
+         end)
+
+  10     T('When invoked with multiple callbacks', function (T)
+   2         Convoke(function (continue, wait)
+   1             doStuff(123, 456, continue())
+   1             local r1, r2 = wait()
+   2             T:assert(r1 == 123 and r2 == 456,
+   1             'Then "wait" returns arguments passed to contination function')
+   3         end)(function (continue, wait)
+   1             doStuff(234, 345, continue())
+   1             local r1, r2 = wait()
+   2             T:assert(r1 == 234 and r2 == 345,
+   1             'Then "wait" returns arguments passed to contination function x2')
+   3         end)()
+
+   1         go()
+         end)
+
+  10     T('When invoked with a callback after running', function (T)
+             local foo
+
+   2         local c = Convoke(function (continue, wait)
+   1             doStuff(123, 456, continue())
+   1             local r1, r2 = wait()
+   2             T:assert(r1 == 123 and r2 == 456,
+   1             'Then "wait" returns arguments passed to contination function')
+   1             foo = 1
+             end)
+
+   1         c()
+   1         go()
+
+   1         T:assert(foo == 1, 'Then the first callback runs')
+
+   2         c(function (continue, wait)
+   1             doStuff(234, 345, continue())
+   1             local r1, r2 = wait()
+   2             T:assert(r1 == 234 and r2 == 345,
+   1             'Then "wait" returns arguments passed to contination function x2')
+   1             foo = 2
+             end)
+
+   1         go()
+
+   1         T:assert(foo == 2, 'Then the second callback runs')
+         end)
+
+     end)
 
 ==============================================================================
 ./spec/event.lua
 ==============================================================================
-   2	T('Given event module is loaded', function (T)
-  14	    local Event = require 'knife.event'
-  14	    Event.handlers = {}
-    	
-  28	    T('When a handler is registered', function (T)
-    	        local eventArg
-  13	        local fooHandler = Event.on('foo', function (x) eventArg = x end)
-    	
-  20	        T('When the event fires', function (T)
-   1	            assert(eventArg == nil)
-   1	            Event.dispatch('foo', 123)
-   1	            T:assert(eventArg == 123, 'Then the handler runs')
-    	        end)
-    	
-  20	        T('When the handler is removed and the event fires', function (T)
-   2	            fooHandler:remove()
-   2	            assert(eventArg == nil)
-   2	            Event.dispatch('foo', 123)
-   2	            T:assert(eventArg == nil, 'Then the handler does not run')
-    	
-   4	            T('When the handler is removed again', function (T)
-   1	                fooHandler:remove()
-   1	                T:assert(true, 'Then no error occurs')
-    	            end)
-    	        end)
-    	
-  20	        T('When a second handler is registered', function (T)
-    	            local eventArg2
-   7	            local fooHandler2 = Event.on('foo', function (x) eventArg2 = x end)
-    	
-  10	            T('When the event fires', function (T)
-   1	                assert(eventArg == nil and eventArg2 == nil)
-   1	                Event.dispatch('foo', 123)
-   1	                T:assert(eventArg == 123, 'Then the first handler runs')
-   1	                T:assert(eventArg2 == 123, 'Then the second handler runs')
-    	            end)
-    	
-  10	            T('When the first handler is removed and the event fires', function (T)
-   1	                fooHandler:remove()
-   1	                assert(eventArg == nil and eventArg2 == nil)
-   1	                Event.dispatch('foo', 123)
-   1	                T:assert(eventArg == nil, 'Then the first handler does not run')
-   1	                T:assert(eventArg2 == 123, 'Then the second handler runs')
-    	            end)
-    	
-  10	            T('When the second handler is removed and the event fires', function (T)
-   1	                fooHandler2:remove()
-   1	                assert(eventArg == nil and eventArg2 == nil)
-   1	                Event.dispatch('foo', 123)
-   1	                T:assert(eventArg == 123, 'Then the first handler runs')
-   1	                T:assert(eventArg2 == nil, 'Then the second handler does not run')
-    	            end)
-    	
-  10	            T('When the handler is registered again', function (T)
-   1	                fooHandler2:register()
-   1	                T:assert(true, 'Then no error occurs')
-    	            end)
-    	
-    	        end)
-    	
-  20	        T('When a second handler returning false is registered', function (T)
-    	            local eventArg2
-   2	            Event.on('foo', function (x)
-   1	                eventArg2 = x
-   1	                return false
-    	            end)
-   1	            assert(eventArg == nil and eventArg2 == nil)
-   1	            Event.dispatch('foo', 123)
-   1	            T:assert(eventArg == nil, 'Then the first handler does not run')
-   1	            T:assert(eventArg2 == 123, 'Then the second handler runs')
-    	        end)
-    	
-    	    end)
-    	
-  28	    T('When dispatchers are hooked into a table', function (T)
-   1	        local t = { bar = true }
-    	        local eventArg
-   1	        Event.hook(t)
-   2	        Event.on('bar', function (x) eventArg = x end)
-   1	        assert(eventArg == nil)
-   1	        t.bar(123)
-   1	        T:assert(eventArg == 123, 'Then members of the table dispatch events')
-    	    end)
-    	
-  28	    T('When dispatchers are hooked into a table of functions', function (T)
-   1	        local z = 1
-   2	        local t = { bar = function (y) z = y end }
-    	        local eventArg
-   1	        Event.hook(t)
-   2	        Event.on('bar', function (x) eventArg = x end)
-   1	        assert(eventArg == nil)
-   1	        t.bar(123)
-   1	        T:assert(z == 123, 'Then original function runs')
-   1	        T:assert(eventArg == 123, 'Then members of the table dispatch events')
-    	    end)
-    	
-  28	    T('When dispatchers are hooked into a table by key', function (T)
-   1	        local t = {}
-    	        local eventArg
-   1	        Event.hook(t, { 'baz' })
-   2	        Event.on('baz', function (x) eventArg = x end)
-   1	        assert(eventArg == nil)
-   1	        t.baz(123)
-   1	        T:assert(eventArg == 123, 'Then members of the table dispatch events')
-    	    end)
-    	
-    	end)
+   2 T('Given event module is loaded', function (T)
+  14     local Event = require 'knife.event'
+  14     Event.handlers = {}
+
+  28     T('When a handler is registered', function (T)
+             local eventArg
+  13         local fooHandler = Event.on('foo', function (x) eventArg = x end)
+
+  20         T('When the event fires', function (T)
+   1             assert(eventArg == nil)
+   1             Event.dispatch('foo', 123)
+   1             T:assert(eventArg == 123, 'Then the handler runs')
+             end)
+
+  20         T('When the handler is removed and the event fires', function (T)
+   2             fooHandler:remove()
+   2             assert(eventArg == nil)
+   2             Event.dispatch('foo', 123)
+   2             T:assert(eventArg == nil, 'Then the handler does not run')
+
+   4             T('When the handler is removed again', function (T)
+   1                 fooHandler:remove()
+   1                 T:assert(true, 'Then no error occurs')
+                 end)
+             end)
+
+  20         T('When a second handler is registered', function (T)
+                 local eventArg2
+   7             local fooHandler2 = Event.on('foo', function (x) eventArg2 = x end)
+
+  10             T('When the event fires', function (T)
+   1                 assert(eventArg == nil and eventArg2 == nil)
+   1                 Event.dispatch('foo', 123)
+   1                 T:assert(eventArg == 123, 'Then the first handler runs')
+   1                 T:assert(eventArg2 == 123, 'Then the second handler runs')
+                 end)
+
+  10             T('When the first handler is removed and the event fires', function (T)
+   1                 fooHandler:remove()
+   1                 assert(eventArg == nil and eventArg2 == nil)
+   1                 Event.dispatch('foo', 123)
+   1                 T:assert(eventArg == nil, 'Then the first handler does not run')
+   1                 T:assert(eventArg2 == 123, 'Then the second handler runs')
+                 end)
+
+  10             T('When the second handler is removed and the event fires', function (T)
+   1                 fooHandler2:remove()
+   1                 assert(eventArg == nil and eventArg2 == nil)
+   1                 Event.dispatch('foo', 123)
+   1                 T:assert(eventArg == 123, 'Then the first handler runs')
+   1                 T:assert(eventArg2 == nil, 'Then the second handler does not run')
+                 end)
+
+  10             T('When the handler is registered again', function (T)
+   1                 fooHandler2:register()
+   1                 T:assert(true, 'Then no error occurs')
+                 end)
+
+             end)
+
+  20         T('When a second handler returning false is registered', function (T)
+                 local eventArg2
+   2             Event.on('foo', function (x)
+   1                 eventArg2 = x
+   1                 return false
+                 end)
+   1             assert(eventArg == nil and eventArg2 == nil)
+   1             Event.dispatch('foo', 123)
+   1             T:assert(eventArg == nil, 'Then the first handler does not run')
+   1             T:assert(eventArg2 == 123, 'Then the second handler runs')
+             end)
+
+         end)
+
+  28     T('When dispatchers are hooked into a table', function (T)
+   1         local t = { bar = true }
+             local eventArg
+   1         Event.hook(t)
+   2         Event.on('bar', function (x) eventArg = x end)
+   1         assert(eventArg == nil)
+   1         t.bar(123)
+   1         T:assert(eventArg == 123, 'Then members of the table dispatch events')
+         end)
+
+  28     T('When dispatchers are hooked into a table of functions', function (T)
+   1         local z = 1
+   2         local t = { bar = function (y) z = y end }
+             local eventArg
+   1         Event.hook(t)
+   2         Event.on('bar', function (x) eventArg = x end)
+   1         assert(eventArg == nil)
+   1         t.bar(123)
+   1         T:assert(z == 123, 'Then original function runs')
+   1         T:assert(eventArg == 123, 'Then members of the table dispatch events')
+         end)
+
+  28     T('When dispatchers are hooked into a table by key', function (T)
+   1         local t = {}
+             local eventArg
+   1         Event.hook(t, { 'baz' })
+   2         Event.on('baz', function (x) eventArg = x end)
+   1         assert(eventArg == nil)
+   1         t.baz(123)
+   1         T:assert(eventArg == 123, 'Then members of the table dispatch events')
+         end)
+
+     end)
 
 ==============================================================================
 ./spec/memoize.lua
 ==============================================================================
-   2	T('memoize', 
-    	function (T)
-    	    
-  15	  local memoize = require 'knife.memoize'
-    	
-  15	  local counter = 0
-    	
-    	  local function count(...)
-  12	    counter = counter + 1
-  12	    return counter
-    	  end
-    	
-  15	  local memoized_count = memoize(count)
-    	
-    	  local function switch(x,y)
-   2	    counter = counter + 1
-   2	    return y,x
-    	  end
-    	
-  15	  local memoized_switch = memoize(switch)
-    	
-  15	  local countable = setmetatable({}, {__call = count})
-  15	  local memoized_countable = memoize(countable)
-    	
-    	  local function count2(...)
-   1	    counter = counter + 1
-   1	    return counter
-    	  end
-    	
-  30	  T("should accept ony non-callable parameters, and error otherwise", 
-    	  function (T)
-   2	    T:error(function() memoize() end)
-   2	    T:error(function() memoize('foo') end)
-   2	    T:error(function() memoize(1) end)
-   2	    T:error(function() memoize({}) end)
-   1	    memoize(print)
-   1	    memoize(countable)
-    	  end)
-  30	  T("should work with 0 parameters", 
-    	  function (T)
-   1	    memoized_count()
-   1	    T:assert(memoized_count() == 1)
-   1	    T:assert(counter == 1)
-    	  end)
-    	
-  30	  T("should work with one parameter", 
-    	  function (T)
-   1	    memoized_count('foo')
-   1	    T:assert(memoized_count('foo') == 1)
-   1	    T:assert(memoized_count('bar') == 2)
-   1	    T:assert(memoized_count('foo') == 1)
-   1	    T:assert(memoized_count('bar') == 2)
-   1	    T:assert(counter == 2)
-    	  end)
-    	
-  30	  T("should work with two parameters", 
-    	  function (T)
-   1	    memoized_count('foo', 'bar')
-   1	    T:assert(memoized_count('foo', 'bar') == 1, '1')
-   1	    T:assert(memoized_count('foo', 'baz') == 2, '2')
-   1	    T:assert(memoized_count('foo', 'bar') == 1, '3')
-   1	    T:assert(memoized_count('foo', 'baz') == 2, '4')
-   1	    T:assert(counter == 2)
-    	  end)
-    	
-  30	  T("should work with tables & functions", 
-    	  function (T)
-   1	    local t1 = {}
-   1	    local t2 = {}
-   1	    T:assert(memoized_count(print, t1) == 1)
-   1	    T:assert(memoized_count(print, t2) == 2)
-   1	    T:assert(memoized_count(print, t1) == 1)
-   1	    T:assert(memoized_count(print, t2) == 2)
-   1	    T:assert(counter == 2)
-    	  end)
-    	
-  30	  T("should return multiple values when needed", 
-    	  function (T)
-   1	    local x,y = memoized_switch(100, 200)
-   1	    T:assert(x == 200)
-   1	    T:assert(y == 100)
-   1	    T:assert(counter == 1)
-   1	    x,y = memoized_switch(400, 500)
-   1	    T:assert(x == 500)
-   1	    T:assert(y == 400)
-   1	    T:assert(counter == 2)
-   1	    x,y = memoized_switch(100, 200)
-   1	    T:assert(x == 200)
-   1	    T:assert(y == 100)
-   1	    T:assert(counter == 2)
-   1	    x,y = memoized_switch(400, 500)
-   1	    T:assert(x == 500)
-   1	    T:assert(y == 400)
-   1	    T:assert(counter == 2)
-    	  end)
-    	
-  30	  T("should clean cache when called twice", 
-    	  function (T)
-   1	    memoized_count('reset')
-   1	    T:assert(memoized_count('reset') == 1)
-   1	    memoize(count)
-   1	    T:assert(memoized_count('reset') == 2)
-    	  end)
-    	
-  30	  T( 'callable tables', 
-    	  function (T)
-    	    
-   8	    T("Unchanged callable tables should work just like functions", 
-    	    function (T)
-   1	      memoized_countable()
-   1	      T:assert(memoized_countable() == 1)
-   1	      T:assert(counter == 1)
-   1	      memoized_countable('foo')
-   1	      T:assert(memoized_countable('foo') == 2)
-   1	      T:assert(counter == 2)
-    	    end)
-    	
-   8	    T("When callable table's __call metamethod is changed, the cache is reset", 
-    	    function (T)
-   1	      memoized_countable('bar')
-   1	      T:assert(memoized_countable('bar') == 1)
-   1	      local mt = getmetatable(countable)
-   1	      mt.__call = count2
-   1	      memoized_countable('bar')
-   1	      T:assert(memoized_countable('bar') == 2)
-   1	      T:assert(memoized_countable('bar') == 2)
-    	    end)
-    	
-   8	    T("An error is thrown if a memoized callable table loses its __call", 
-    	    function (T)
-   1	      local mt = getmetatable(countable)
-   1	      mt.__call = nil
-   2	      T:error(function() memoized_countable() end)
-    	    end)
-    	  end)
-    	  
-  30	  T("airstruck", 
-    	  function (T)
-    	  
-   6	      T("handles nil arguments", 
-    	      function (T)
-    	  
-    	        local function cat(a, b, c)
-   4	          return tostring(a) .. tostring(b) .. tostring(c)
-    	        end
-    	
-   1	        local memoized_cat = memoize(cat)
-    	        
-   1	        T:assert(memoized_cat('a', 'b', 'c') == 'abc', '1')
-   1	        T:assert(memoized_cat('a', 'b', 'c') == 'abc', '2')
-    	        
-   1	        T:assert(memoized_cat('va', nil, 'la') == 'vanilla', '3')
-   1	        T:assert(memoized_cat('va', nil, 'la') == 'vanilla', '4')
-    	        
-   1	        T:assert(memoized_cat('va', 'la') == 'valanil', '5')
-   1	        T:assert(memoized_cat('va', 'la') == 'valanil', '6')
-    	        
-   1	        T:assert(memoized_cat('va') == 'vanilnil', '7')
-   1	        T:assert(memoized_cat('va') == 'vanilnil', '8')
-    	        
-    	      end)
-    	      
-   6	      T("handles nil results", 
-    	      function (T)
-    	      
-    	        local function passthrough (a, b, c)
-   2	          return a, b, c
-    	        end
-    	
-   1	        local memoized_passthrough = memoize(passthrough)
-    	      
-   1	        local a, b, c = memoized_passthrough('a', 'b', 'c')
-   1	        T:assert(a == 'a') T:assert(b == 'b') T:assert(c == 'c')
-    	        
-   1	        a, b, c = memoized_passthrough('a', 'b', 'c')
-   1	        T:assert(a == 'a') T:assert(b == 'b') T:assert(c == 'c')
-    	        
-   1	        x, y, z = memoized_passthrough('x', nil, 'z')
-   1	        T:assert(x == 'x') T:assert(y == nil) T:assert(z == 'z')
-    	        
-   1	        x, y, z = memoized_passthrough('x', nil, 'z')
-   1	        T:assert(x == 'x') T:assert(y == nil) T:assert(z == 'z')
-    	        
-    	      end)
-    	      
-    	  end)
-    	
-    	end)
-    	
+   2 T('memoize', 
+     function (T)
+         
+  15   local memoize = require 'knife.memoize'
+
+  15   local counter = 0
+
+       local function count(...)
+  12     counter = counter + 1
+  12     return counter
+       end
+
+  15   local memoized_count = memoize(count)
+
+       local function switch(x,y)
+   2     counter = counter + 1
+   2     return y,x
+       end
+
+  15   local memoized_switch = memoize(switch)
+
+  15   local countable = setmetatable({}, {__call = count})
+  15   local memoized_countable = memoize(countable)
+
+       local function count2(...)
+   1     counter = counter + 1
+   1     return counter
+       end
+
+  30   T("should accept ony non-callable parameters, and error otherwise", 
+       function (T)
+   2     T:error(function() memoize() end)
+   2     T:error(function() memoize('foo') end)
+   2     T:error(function() memoize(1) end)
+   2     T:error(function() memoize({}) end)
+   1     memoize(print)
+   1     memoize(countable)
+       end)
+  30   T("should work with 0 parameters", 
+       function (T)
+   1     memoized_count()
+   1     T:assert(memoized_count() == 1)
+   1     T:assert(counter == 1)
+       end)
+
+  30   T("should work with one parameter", 
+       function (T)
+   1     memoized_count('foo')
+   1     T:assert(memoized_count('foo') == 1)
+   1     T:assert(memoized_count('bar') == 2)
+   1     T:assert(memoized_count('foo') == 1)
+   1     T:assert(memoized_count('bar') == 2)
+   1     T:assert(counter == 2)
+       end)
+
+  30   T("should work with two parameters", 
+       function (T)
+   1     memoized_count('foo', 'bar')
+   1     T:assert(memoized_count('foo', 'bar') == 1, '1')
+   1     T:assert(memoized_count('foo', 'baz') == 2, '2')
+   1     T:assert(memoized_count('foo', 'bar') == 1, '3')
+   1     T:assert(memoized_count('foo', 'baz') == 2, '4')
+   1     T:assert(counter == 2)
+       end)
+
+  30   T("should work with tables & functions", 
+       function (T)
+   1     local t1 = {}
+   1     local t2 = {}
+   1     T:assert(memoized_count(print, t1) == 1)
+   1     T:assert(memoized_count(print, t2) == 2)
+   1     T:assert(memoized_count(print, t1) == 1)
+   1     T:assert(memoized_count(print, t2) == 2)
+   1     T:assert(counter == 2)
+       end)
+
+  30   T("should return multiple values when needed", 
+       function (T)
+   1     local x,y = memoized_switch(100, 200)
+   1     T:assert(x == 200)
+   1     T:assert(y == 100)
+   1     T:assert(counter == 1)
+   1     x,y = memoized_switch(400, 500)
+   1     T:assert(x == 500)
+   1     T:assert(y == 400)
+   1     T:assert(counter == 2)
+   1     x,y = memoized_switch(100, 200)
+   1     T:assert(x == 200)
+   1     T:assert(y == 100)
+   1     T:assert(counter == 2)
+   1     x,y = memoized_switch(400, 500)
+   1     T:assert(x == 500)
+   1     T:assert(y == 400)
+   1     T:assert(counter == 2)
+       end)
+
+  30   T("should clean cache when called twice", 
+       function (T)
+   1     memoized_count('reset')
+   1     T:assert(memoized_count('reset') == 1)
+   1     memoize(count)
+   1     T:assert(memoized_count('reset') == 2)
+       end)
+
+  30   T( 'callable tables', 
+       function (T)
+         
+   8     T("Unchanged callable tables should work just like functions", 
+         function (T)
+   1       memoized_countable()
+   1       T:assert(memoized_countable() == 1)
+   1       T:assert(counter == 1)
+   1       memoized_countable('foo')
+   1       T:assert(memoized_countable('foo') == 2)
+   1       T:assert(counter == 2)
+         end)
+
+   8     T("When callable table's __call metamethod is changed, the cache is reset", 
+         function (T)
+   1       memoized_countable('bar')
+   1       T:assert(memoized_countable('bar') == 1)
+   1       local mt = getmetatable(countable)
+   1       mt.__call = count2
+   1       memoized_countable('bar')
+   1       T:assert(memoized_countable('bar') == 2)
+   1       T:assert(memoized_countable('bar') == 2)
+         end)
+
+   8     T("An error is thrown if a memoized callable table loses its __call", 
+         function (T)
+   1       local mt = getmetatable(countable)
+   1       mt.__call = nil
+   2       T:error(function() memoized_countable() end)
+         end)
+       end)
+       
+  30   T("airstruck", 
+       function (T)
+       
+   6       T("handles nil arguments", 
+           function (T)
+       
+             local function cat(a, b, c)
+   4           return tostring(a) .. tostring(b) .. tostring(c)
+             end
+
+   1         local memoized_cat = memoize(cat)
+             
+   1         T:assert(memoized_cat('a', 'b', 'c') == 'abc', '1')
+   1         T:assert(memoized_cat('a', 'b', 'c') == 'abc', '2')
+             
+   1         T:assert(memoized_cat('va', nil, 'la') == 'vanilla', '3')
+   1         T:assert(memoized_cat('va', nil, 'la') == 'vanilla', '4')
+             
+   1         T:assert(memoized_cat('va', 'la') == 'valanil', '5')
+   1         T:assert(memoized_cat('va', 'la') == 'valanil', '6')
+             
+   1         T:assert(memoized_cat('va') == 'vanilnil', '7')
+   1         T:assert(memoized_cat('va') == 'vanilnil', '8')
+             
+           end)
+           
+   6       T("handles nil results", 
+           function (T)
+           
+             local function passthrough (a, b, c)
+   2           return a, b, c
+             end
+
+   1         local memoized_passthrough = memoize(passthrough)
+           
+   1         local a, b, c = memoized_passthrough('a', 'b', 'c')
+   1         T:assert(a == 'a') T:assert(b == 'b') T:assert(c == 'c')
+             
+   1         a, b, c = memoized_passthrough('a', 'b', 'c')
+   1         T:assert(a == 'a') T:assert(b == 'b') T:assert(c == 'c')
+             
+   1         x, y, z = memoized_passthrough('x', nil, 'z')
+   1         T:assert(x == 'x') T:assert(y == nil) T:assert(z == 'z')
+             
+   1         x, y, z = memoized_passthrough('x', nil, 'z')
+   1         T:assert(x == 'x') T:assert(y == nil) T:assert(z == 'z')
+             
+           end)
+           
+       end)
+
+     end)
+
 
 ==============================================================================
 ./spec/serialize.lua
 ==============================================================================
-   1	local loadstring = _G.loadstring or _G.load
-    	
-   2	T('Given serialized data', function (T)
-   2	    local Serialize = require 'knife.serialize'
-    	
-   2	    local data = {
-   2	        a = 'a',
-   2	        b = 123,
-   2	        c = false,
-   2	        e = { a = 1 },
-   2	        f = function () end,
-   2	        g = { 3, 2, 1 },
-    	    }
-    	
-   2	    data.d = data
-   2	    data.e[data] = 2
-    	
-   2	    local nan = tostring(0/0) == 'nan' and 0/0 or -(0/0)
-    	
-   2	    data.huge = math.huge
-   2	    data.tiny = -math.huge
-   2	    data.pnan = nan
-   2	    data.nnan = -nan
-    	
-   2	    local serialized = Serialize(data)
-    	
-   4	    T('When the data is deserialized', function (T)
-   1	        local d = loadstring(serialized)()
-    	
-   1	        T:assert(d.a == 'a', 'Then strings are stored')
-   1	        T:assert(d.b == 123, 'Then numbers are stored')
-   1	        T:assert(d.c == false, 'Then booleans are stored')
-   1	        T:assert(d.d == d, 'Then circular references are stored')
-   1	        T:assert(d.e.a == 1, 'Then tables are stored')
-   1	        T:assert(d.e[d] == 2, 'Then circular reference keys are stored')
-   1	        T:assert(d.f == nil, 'Then functions are not stored')
-   1	        T:assert(table.concat(d.g) == '321', 'Then arrays are stored')
-    	
-   1	        T:assert(d.huge == math.huge, 'Then infinity is stored correctly')
-   1	        T:assert(d.tiny == -math.huge, 'Then -infinity is stored correctly')
-   1	        T:assert(tostring(d.pnan) == 'nan', 'Then NaN is stored correctly')
-   2	        T:assert(tostring(d.nnan) == '-nan' or tostring(d.nnan) == 'nan',
-   1	        'Then -NaN is stored correctly') -- luajit doesn't print -nan
-    	    end)
-    	
-    	end)
+   1 local loadstring = _G.loadstring or _G.load
+
+   2 T('Given serialized data', function (T)
+   2     local Serialize = require 'knife.serialize'
+
+   2     local data = {
+   2         a = 'a',
+   2         b = 123,
+   2         c = false,
+   2         e = { a = 1 },
+   2         f = function () end,
+   2         g = { 3, 2, 1 },
+         }
+
+   2     data.d = data
+   2     data.e[data] = 2
+
+   2     local nan = tostring(0/0) == 'nan' and 0/0 or -(0/0)
+
+   2     data.huge = math.huge
+   2     data.tiny = -math.huge
+   2     data.pnan = nan
+   2     data.nnan = -nan
+
+   2     local serialized = Serialize(data)
+
+   4     T('When the data is deserialized', function (T)
+   1         local d = loadstring(serialized)()
+
+   1         T:assert(d.a == 'a', 'Then strings are stored')
+   1         T:assert(d.b == 123, 'Then numbers are stored')
+   1         T:assert(d.c == false, 'Then booleans are stored')
+   1         T:assert(d.d == d, 'Then circular references are stored')
+   1         T:assert(d.e.a == 1, 'Then tables are stored')
+   1         T:assert(d.e[d] == 2, 'Then circular reference keys are stored')
+   1         T:assert(d.f == nil, 'Then functions are not stored')
+   1         T:assert(table.concat(d.g) == '321', 'Then arrays are stored')
+
+   1         T:assert(d.huge == math.huge, 'Then infinity is stored correctly')
+   1         T:assert(d.tiny == -math.huge, 'Then -infinity is stored correctly')
+   1         T:assert(tostring(d.pnan) == 'nan', 'Then NaN is stored correctly')
+   2         T:assert(tostring(d.nnan) == '-nan' or tostring(d.nnan) == 'nan',
+   1         'Then -NaN is stored correctly') -- luajit doesn't print -nan
+         end)
+
+     end)
 
 ==============================================================================
 ./spec/system.lua
 ==============================================================================
-   2	T('Given some systems and some entities',
-    	function (T)
-  12	    local System = require 'knife.system'
-    	
-  12	    local e1 = {
-  12	        position = { x = 10, y = 20 },
-    	    }
-  12	    local e2 = {
-  12	        position = { x = 30, y = 40 },
-  12	        velocity = { x = 1, y = 2 }
-    	    }
-    	
-  24	    local updatePosition = System(
-  12	    { 'position', 'velocity' },
-    	    function (pos, vel)
-   2	        pos.x = pos.x + vel.x
-   2	        pos.y = pos.y + vel.y
-    	    end)
-    	
-  24	    local updateBoundary = System(
-  12	    { 'position', 'velocity' },
-    	    function (pos, vel)
-   1	        if pos.y > 40 then
-   1	            return true
-    	        end
-    	    end)
-    	
-  12	    local entities = { e1, e2 }
-    	
-  24	    T('When a system is invoked',
-    	    function (T)
-   1	        updatePosition(entities)
-   2	        T:assert(entities[2].position.y == 42,
-   1	        'Then the components of the entities are updated')
-    	    end)
-    	
-  24	    T('When a system with an empty aspects list is invoked',
-    	    function (T)
-   1	        local counter = 0
-    	
-   2	        local noAspects = System({}, function ()
-   2	            counter = counter + 1
-    	        end)
-    	
-   1	        noAspects(entities)
-   2	        T:assert(counter == 2,
-   1	        'Then all entities are processed')
-    	    end)
-    	
-  24	    T('When a system references a pseudo-component',
-    	    function (T)
-   1	        local results = {}
-   2	        local pseudo = System(
-   1	        { '_entity' },
-    	        function (entity)
-   2	            results[#results + 1] = entity
-    	        end)
-   1	        pseudo(entities)
-   2	        T:assert(results[1] == e1 and results[2] == e2,
-   1	        'Then the pseudo-component is available to the process')
-    	    end)
-    	
-  24	    T('When a process returns true',
-    	    function (T)
-   1	        assert(#entities == 2)
-   1	        updatePosition(entities)
-   1	        updateBoundary(entities)
-   2	        T:assert(#entities == 1 and entities[1] == e1,
-   1	        'Then the current entity is removed')
-    	    end)
-    	
-  24	    T('When a process returns a table of entities to remove',
-    	    function (T)
-    	
-   2	        local testRemovalByIndices = System(
-   1	        { 'position', '_entities' },
-    	        function (pos, e)
-   2	            return { e[1], e[2] }
-    	        end)
-    	
-   1	        assert(#entities == 2)
-   1	        testRemovalByIndices(entities)
-   2	        T:assert(#entities == 0,
-   1	        'Then the corresponding entities are removed')
-    	    end)
-    	
-  24	    T('When a process returns an invalid removal value',
-    	    function (T)
-    	
-   2	        local testRemovalError = System(
-   1	        { 'position' },
-    	        function (pos)
-   1	            return 'x'
-    	        end)
-    	
-   3	        T:error(function () testRemovalError(entities) end,
-   1	        'Then an error is thrown')
-    	    end)
-    	
-  24	    T('When a process returns new entities',
-    	    function (T)
-    	
-   1	        local e3 = {
-   1	            position = { x = 1, y = 2 },
-   1	            velocity = { x = 2, y = 1 }
-    	        }
-    	
-   2	        local addStuff = System(
-   1	        { 'position', 'velocity' },
-    	        function (pos, vel)
-   1	            return false, { e3 }
-    	        end)
-    	
-   1	        assert(#entities == 2)
-   1	        addStuff(entities)
-   2	        T:assert(entities[3] == e3,
-   1	        'Then the new entities are added')
-    	    end)
-    	
-  24	    T('When an aspect has choices',
-    	    function (T)
-    	
-    	        local result
-    	
-   2	        local s = System(
-   1	        { 'position|velocity', 'position', 'velocity' },
-    	        function (pv, p, v)
-   1	            result = pv == p
-    	        end)
-   1	        s(entities)
-   1	        T:assert(result, 'Then first available is chosen')
-    	
-   2	        local s = System(
-   1	        { 'velocity|position', 'position', 'velocity' },
-    	        function (pv, p, v)
-   1	            result = pv == v
-    	        end)
-   1	        s(entities)
-   1	        T:assert(result, 'Then first available is chosen x2')
-    	
-    	    end)
-    	
-  24	    T('When an aspect has reject sigil',
-    	    function (T)
-    	
-    	        local result
-    	
-   2	        local s = System(
-   1	        { '!velocity', 'position' },
-    	        function (p)
-   1	            result = p.x
-    	        end)
-   1	        s(entities)
-   1	        T:assert(result == 10, 'Then matching entities are not processed')
-    	
-    	    end)
-    	
-  24	    T('When an aspect has mute sigil',
-    	    function (T)
-    	
-    	        local result
-    	
-   2	        local s = System(
-   1	            { 'position', '-velocity', '_entity' },
-    	            function (p, e)
-   1	                result = { p, e }
-    	            end)
-   1	        s(entities)
-   2	        T:assert(result[1] == e2.position and result[2] == e2,
-   1	        'Then it is suppressed from the args list')
-    	
-    	    end)
-    	
-  24	    T('When an aspect has option sigil',
-    	    function (T)
-    	
-   1	        local result = {}
-    	
-   2	        local s = System(
-   1	            { 'position', '?velocity', '_entity' },
-    	            function (p, v, e)
-   2	                result[#result + 1] = { p, v, e }
-    	            end)
-   1	        s(entities)
-    	
-   2	        T:assert(result[1][1] == e1.position
-   1	            and result[1][2] == nil
-   1	            and result[1][3] == e1
-   1	            and result[2][1] == e2.position
-   1	            and result[2][2] == e2.velocity
-   1	            and result[2][3] == e2,
-   1	            'Then it is optional')
-    	
-    	    end)
-    	
-    	end)
+   2 T('Given some systems and some entities',
+     function (T)
+   9     local System = require 'knife.system'
+
+   9     local e1 = {
+   9         position = { x = 10, y = 20 },
+         }
+   9     local e2 = {
+   9         position = { x = 30, y = 40 },
+   9         velocity = { x = 1, y = 2 }
+         }
+
+  18     local updatePosition = System(
+   9     { 'position', 'velocity' },
+         function (pos, vel)
+   1         pos.x = pos.x + vel.x
+   1         pos.y = pos.y + vel.y
+         end)
+
+   9     local entities = { e1, e2 }
+
+  18     T('When a system is invoked',
+         function (T)
+   1         updatePosition(e2)
+   2         T:assert(entities[2].position.y == 42,
+   1         'Then the components of the entities are updated')
+         end)
+
+  18     T('When a system with an empty aspects list is invoked',
+         function (T)
+   1         local counter = 0
+
+   2         local noAspects = System({}, function ()
+   2             counter = counter + 1
+             end)
+
+   1         noAspects(e1)
+   1         noAspects(e2)
+   2         T:assert(counter == 2,
+   1         'Then all entities are processed')
+         end)
+
+  18     T('When a system references a pseudo-component',
+         function (T)
+   1         local results = {}
+   2         local pseudo = System(
+   1         { '_entity' },
+             function (entity)
+   2             results[#results + 1] = entity
+             end)
+   1         pseudo(e1)
+   1         pseudo(e2)
+   2         T:assert(results[1] == e1 and results[2] == e2,
+   1         'Then the pseudo-component is available to the process')
+         end)
+
+  18     T('When an aspect has choices',
+         function (T)
+
+             local result
+
+   2         local s = System(
+   1         { 'position|velocity', 'position', 'velocity' },
+             function (pv, p, v)
+   1             result = pv == p
+             end)
+   1         s(e1)
+   1         s(e2)
+   1         T:assert(result, 'Then first available is chosen')
+
+   2         local s = System(
+   1         { 'velocity|position', 'position', 'velocity' },
+             function (pv, p, v)
+   1             result = pv == v
+             end)
+   1         s(e1)
+   1         s(e2)
+   1         T:assert(result, 'Then first available is chosen x2')
+
+         end)
+
+  18     T('When an aspect has reject sigil',
+         function (T)
+
+             local result
+
+   2         local s = System(
+   1         { '!velocity', 'position' },
+             function (p)
+   1             result = p.x
+             end)
+   1         s(e1)
+   1         s(e2)
+   1         T:assert(result == 10, 'Then matching entities are not processed')
+
+         end)
+
+  18     T('When an aspect has mute sigil',
+         function (T)
+
+             local result
+
+   2         local s = System(
+   1             { 'position', '-velocity', '_entity' },
+                 function (p, e)
+   1                 result = { p, e }
+                 end)
+   1         s(e1)
+   1         s(e2)
+   2         T:assert(result[1] == e2.position and result[2] == e2,
+   1         'Then it is suppressed from the args list')
+
+         end)
+
+  18     T('When an aspect has option sigil',
+         function (T)
+
+   1         local result = {}
+
+   2         local s = System(
+   1             { 'position', '?velocity', '_entity' },
+                 function (p, v, e)
+   2                 result[#result + 1] = { p, v, e }
+                 end)
+   1         s(e1)
+   1         s(e2)
+
+   2         T:assert(result[1][1] == e1.position
+   1             and result[1][2] == nil
+   1             and result[1][3] == e1
+   1             and result[2][1] == e2.position
+   1             and result[2][2] == e2.velocity
+   1             and result[2][3] == e2,
+   1             'Then it is optional')
+
+         end)
+         
+  18     T('When an aspect has return sigil',
+         function (T)
+
+             local result
+
+   2         local s = System(
+   1             { 'position', '=velocity', '_entity' },
+                 function (p, v, e)
+   1                 return { x = 2, y = 1 }
+                 end)
+   1         s(e1)
+   1         s(e2)
+   2         T:assert(e2.velocity.x == 2,
+   1         'Then it is set from return value')
+
+         end)
+     end)
 
 ==============================================================================
 ./spec/test.lua
 ==============================================================================
-   2	T('Given an empty table', 
-    	function (T)
-   6	  local t = {}
-  12	  T('When an item is inserted into a table', 
-    	  function (T)
-   5	    assert(#t == 0)
-   5	    table.insert(t, 111)
-   5	    T:assert(#t == 1, 'Then the size of the table is 1')
-   5	    T:assert(t[1] == 111, 'Then the item is stored in index 1')
-    	    
-  10	    T('When the index is set to nil', 
-    	    function (T)
-   1	      assert(#t == 1)
-   1	      t[1] = nil
-   1	      T:assert(#t == 0, 'Then the size of the table is 0')
-   2	        pcall(function ()
-   2	            T:error(function () end, 'THIS TEST INTENTIONALLY FAILS')
-    	        end)
-    	    end)
-    	    
-  10	    T('When another item is inserted', 
-    	    function (T)
-   3	      assert(#t == 1)
-   3	      table.insert(t, 222)
-   3	      T:assert(#t == 2, 'Then the size of the table is 2')
-   3	      T:assert(t[2] == 222, 'Then the second item is stored in index 2')
-    	
-   6	      T('When the first item is removed with table.remove', 
-    	      function (T)
-   1	        assert(#t == 2)
-   1	        table.remove(t, 1)
-   1	        T:assert(#t == 1, 'Then the size of the table is 1')
-   1	        T:assert(t[1] == 222, 'Then the second item has moved to index 1')
-    	      end)
-    	      
-   6	      T('When the first item is set to nil', 
-    	      function (T)
-   1	        assert(#t == 2)
-   1	        t[1] = nil
-   1	        T:assert(#t == 2, 'Then the size of the table is 2')
-   1	        T:assert(t[2] == 222, 'Then the second item remains in index 2')
-   2	        pcall(function () 
-   1	            T:assert(false, 'THIS TEST INTENTIONALLY FAILS') 
-    	        end)
-    	      end)
-    	    end)
-    	    
-    	  end)
-    	end)
-    	
-   2	T('Given a value of two', function (T)
-   3	  local value = 2
-   6	  T('When the value is increased by five', function (T)
-    	    -- here, value is 2
-   1	    value = value + 5
-   1	    local foo = 10
-   1	    T:assert(value == 7 and foo == 10, 'Then the value equals seven')
-    	  end)
-   6	  T('When the value is decreased by five', function (T)
-    	    -- value is 2 again; this test is isolated from the "increased by five" test
-   1	    value = value - 5
-   1	    T:assert(value == -3, 'Then the value equals negative three')
-    	  end)
-    	end)
-    	
-   2	T('Given a value of two', function (T)
-   1	  local value = 2
-   1	  T:assert(value == 2, 'Then the value equals two')
-    	end)
+   2 T('Given an empty table', 
+     function (T)
+   6   local t = {}
+  12   T('When an item is inserted into a table', 
+       function (T)
+   5     assert(#t == 0)
+   5     table.insert(t, 111)
+   5     T:assert(#t == 1, 'Then the size of the table is 1')
+   5     T:assert(t[1] == 111, 'Then the item is stored in index 1')
+         
+  10     T('When the index is set to nil', 
+         function (T)
+   1       assert(#t == 1)
+   1       t[1] = nil
+   1       T:assert(#t == 0, 'Then the size of the table is 0')
+   2         pcall(function ()
+   2             T:error(function () end, 'THIS TEST INTENTIONALLY FAILS')
+             end)
+         end)
+         
+  10     T('When another item is inserted', 
+         function (T)
+   3       assert(#t == 1)
+   3       table.insert(t, 222)
+   3       T:assert(#t == 2, 'Then the size of the table is 2')
+   3       T:assert(t[2] == 222, 'Then the second item is stored in index 2')
+
+   6       T('When the first item is removed with table.remove', 
+           function (T)
+   1         assert(#t == 2)
+   1         table.remove(t, 1)
+   1         T:assert(#t == 1, 'Then the size of the table is 1')
+   1         T:assert(t[1] == 222, 'Then the second item has moved to index 1')
+           end)
+           
+   6       T('When the first item is set to nil', 
+           function (T)
+   1         assert(#t == 2)
+   1         t[1] = nil
+   1         T:assert(#t == 2, 'Then the size of the table is 2')
+   1         T:assert(t[2] == 222, 'Then the second item remains in index 2')
+   2         pcall(function () 
+   1             T:assert(false, 'THIS TEST INTENTIONALLY FAILS') 
+             end)
+           end)
+         end)
+         
+       end)
+     end)
+
+   2 T('Given a value of two', function (T)
+   3   local value = 2
+   6   T('When the value is increased by five', function (T)
+         -- here, value is 2
+   1     value = value + 5
+   1     local foo = 10
+   1     T:assert(value == 7 and foo == 10, 'Then the value equals seven')
+       end)
+   6   T('When the value is decreased by five', function (T)
+         -- value is 2 again; this test is isolated from the "increased by five" test
+   1     value = value - 5
+   1     T:assert(value == -3, 'Then the value equals negative three')
+       end)
+     end)
+
+   2 T('Given a value of two', function (T)
+   1   local value = 2
+   1   T:assert(value == 2, 'Then the value equals two')
+     end)
 
 ==============================================================================
 ./spec/timer.lua
 ==============================================================================
-   2	T('Given Timer, a target object, and an update function', function (T)
-  11	    local Timer = require 'knife.timer'
-    	
-  11	    local group = {}
-    	
-  11	    local target = { x = 100, y = 200, z = 300 }
-    	
-    	    local function update (dt, group)
-  25	        Timer.update(dt, group)
-    	    end
-    	
-  22	    T('When an "after" timer is created and update is called', function (T)
-   3	        local test = 0
-   6	        local timer = Timer.after(1, function (self, late) test = late end)
-   3	            :group(group)
-    	
-   3	        update(3, group)
-    	
-   6	        T:assert(test == 2,
-   3	        'Then callback fires')
-    	
-   6	        T('When group is called with no arguments', function (T)
-   2	            timer:group()
-    	
-   4	            T:assert(timer.groupField == Timer.defaultGroup,
-   2	            'Then the timer is attached the default group')
-    	
-   4	            T('When Timer.clear is called with no arguments', function (T)
-   1	                assert(#Timer.defaultGroup > 0)
-    	
-   1	                Timer.clear()
-    	
-   2	                T:assert(#Timer.defaultGroup == 0,
-   1	                'Then the default group is cleared')
-    	            end)
-    	
-    	        end)
-    	
-    	    end)
-    	
-  22	    T('When an "every" timer is created and update is called', function (T)
-   1	        local test = 0
-    	        local test2
-   5	        local timer = Timer.every(1, function () test = test + 1 end)
-   1	            :group(group)
-   1	            :limit(4)
-   2	            :finish(function () test2 = 1 end)
-    	
-   1	        update(3, group)
-   1	        update(1, group)
-   1	        update(1, group)
-    	
-   2	        T:assert(test == 4,
-   1	        'Then callback fires')
-    	    end)
-    	
-  22	    T('When a "prior" timer is created and update is called', function (T)
-   1	        local test = 0
-    	        local test2
-   4	        local timer = Timer.prior(3, function (self, dt) test = test + dt end)
-   1	            :group(group)
-   2	            :finish(function () test2 = 1 end)
-    	
-   1	        update(1, group)
-   1	        update(1, group)
-   1	        update(1, group)
-   1	        update(1, group)
-   1	        update(1, group)
-   1	        update(1, group)
-    	
-   2	        T:assert(test == 3,
-   1	        'Then callback fires')
-   2	        T:assert(test2 == 1,
-   1	        'Then finalizer fires')
-    	
-    	    end)
-    	
-  22	    T('When a tween is created and update is called', function (T)
-   4	        local test = 0
-   4	        local tween = Timer.tween(10, { [target] = { x = 200, y = 400 } })
-   4	            :group(group)
-   5	            :finish(function () test = 1 end)
-  22	            :ease(function (t, b, c, d) return c * t / d + b end)
-    	
-   4	        update(0.1, group)
-   8	        T:assert(target.x == 101 and target.y == 202,
-   4	        'Then the target values are interpolated')
-   4	        update(0.1, group)
-   8	        T:assert(target.x == 102 and target.y == 204,
-   4	        'Then the target values are interpolated x2')
-    	
-   8	        T('When the tween is stopped and update is called', function (T)
-   2	            tween:remove()
-   2	            update(0.1, group)
-   4	            T:assert(target.x == 102 and target.y == 204,
-   2	            'Then the target values are not interpolated')
-    	
-   4	            T('When the tween is registered and update is called', function (T)
-   1	                tween:register()
-   1	                update(0.1, group)
-   2	                T:assert(target.x == 103 and target.y == 206,
-   1	                'Then the target values are interpolated')
-    	            end)
-    	            
-    	        end)
-    	
-   8	        T('When the tween is updated by a large amount', function (T)
-   1	            update(10, group)
-   2	            T:assert(target.x == 200 and target.y == 400,
-   1	            'Then the target values are finalized')
-   2	            T:assert(test == 1,
-   1	            'Then the callback is invoked')
-    	        end)
-    	
-    	    end)
-    	
-  22	    T('When a simple tween is created and update is called', function (T)
-   1	        Timer.tween(10, { [target] = { x = 200, y = 400 } })
-   1	        update(0.1)
-   2	        T:assert(target.x == 101 and target.y == 202,
-   1	        'Then the target values are interpolated')
-    	    end)
-    	
-    	end)
+   2 T('Given Timer, a target object, and an update function', function (T)
+  11     local Timer = require 'knife.timer'
+
+  11     local group = {}
+
+  11     local target = { x = 100, y = 200, z = 300 }
+
+         local function update (dt, group)
+  25         Timer.update(dt, group)
+         end
+
+  22     T('When an "after" timer is created and update is called', function (T)
+   3         local test = 0
+   6         local timer = Timer.after(1, function (self, late) test = late end)
+   3             :group(group)
+
+   3         update(3, group)
+
+   6         T:assert(test == 2,
+   3         'Then callback fires')
+
+   6         T('When group is called with no arguments', function (T)
+   2             timer:group()
+
+   4             T:assert(timer.groupField == Timer.defaultGroup,
+   2             'Then the timer is attached the default group')
+
+   4             T('When Timer.clear is called with no arguments', function (T)
+   1                 assert(#Timer.defaultGroup > 0)
+
+   1                 Timer.clear()
+
+   2                 T:assert(#Timer.defaultGroup == 0,
+   1                 'Then the default group is cleared')
+                 end)
+
+             end)
+
+         end)
+
+  22     T('When an "every" timer is created and update is called', function (T)
+   1         local test = 0
+             local test2
+   5         local timer = Timer.every(1, function () test = test + 1 end)
+   1             :group(group)
+   1             :limit(4)
+   2             :finish(function () test2 = 1 end)
+
+   1         update(3, group)
+   1         update(1, group)
+   1         update(1, group)
+
+   2         T:assert(test == 4,
+   1         'Then callback fires')
+         end)
+
+  22     T('When a "prior" timer is created and update is called', function (T)
+   1         local test = 0
+             local test2
+   4         local timer = Timer.prior(3, function (self, dt) test = test + dt end)
+   1             :group(group)
+   2             :finish(function () test2 = 1 end)
+
+   1         update(1, group)
+   1         update(1, group)
+   1         update(1, group)
+   1         update(1, group)
+   1         update(1, group)
+   1         update(1, group)
+
+   2         T:assert(test == 3,
+   1         'Then callback fires')
+   2         T:assert(test2 == 1,
+   1         'Then finalizer fires')
+
+         end)
+
+  22     T('When a tween is created and update is called', function (T)
+   4         local test = 0
+   4         local tween = Timer.tween(10, { [target] = { x = 200, y = 400 } })
+   4             :group(group)
+   5             :finish(function () test = 1 end)
+  22             :ease(function (t, b, c, d) return c * t / d + b end)
+
+   4         update(0.1, group)
+   8         T:assert(target.x == 101 and target.y == 202,
+   4         'Then the target values are interpolated')
+   4         update(0.1, group)
+   8         T:assert(target.x == 102 and target.y == 204,
+   4         'Then the target values are interpolated x2')
+
+   8         T('When the tween is stopped and update is called', function (T)
+   2             tween:remove()
+   2             update(0.1, group)
+   4             T:assert(target.x == 102 and target.y == 204,
+   2             'Then the target values are not interpolated')
+
+   4             T('When the tween is registered and update is called', function (T)
+   1                 tween:register()
+   1                 update(0.1, group)
+   2                 T:assert(target.x == 103 and target.y == 206,
+   1                 'Then the target values are interpolated')
+                 end)
+                 
+             end)
+
+   8         T('When the tween is updated by a large amount', function (T)
+   1             update(10, group)
+   2             T:assert(target.x == 200 and target.y == 400,
+   1             'Then the target values are finalized')
+   2             T:assert(test == 1,
+   1             'Then the callback is invoked')
+             end)
+
+         end)
+
+  22     T('When a simple tween is created and update is called', function (T)
+   1         Timer.tween(10, { [target] = { x = 200, y = 400 } })
+   1         update(0.1)
+   2         T:assert(target.x == 101 and target.y == 202,
+   1         'Then the target values are interpolated')
+         end)
+
+     end)
 
 ==============================================================================
 Summary
 ==============================================================================
 
-10	0	100.00%	./knife/base.lua
-40	0	100.00%	./knife/behavior.lua
-18	0	100.00%	./knife/bind.lua
-15	0	100.00%	./knife/chain.lua
-25	0	100.00%	./knife/convoke.lua
-51	0	100.00%	./knife/event.lua
-43	0	100.00%	./knife/memoize.lua
-37	0	100.00%	./knife/serialize.lua
-95	0	100.00%	./knife/system.lua
-61	0	100.00%	./knife/test.lua
-125	0	100.00%	./knife/timer.lua
-39	0	100.00%	./spec/base.lua
-43	0	100.00%	./spec/behavior.lua
-22	0	100.00%	./spec/bind.lua
-48	0	100.00%	./spec/chain.lua
-60	0	100.00%	./spec/convoke.lua
-70	0	100.00%	./spec/event.lua
-111	0	100.00%	./spec/memoize.lua
-33	0	100.00%	./spec/serialize.lua
-103	0	100.00%	./spec/system.lua
-42	0	100.00%	./spec/test.lua
-80	0	100.00%	./spec/timer.lua
-------------------------
-1171	0	100.00%	
+File                  Hits Missed Coverage
+------------------------------------------
+./knife/base.lua      10   0      100.00%
+./knife/behavior.lua  40   0      100.00%
+./knife/bind.lua      18   0      100.00%
+./knife/chain.lua     15   0      100.00%
+./knife/convoke.lua   25   0      100.00%
+./knife/event.lua     51   0      100.00%
+./knife/memoize.lua   43   0      100.00%
+./knife/serialize.lua 37   0      100.00%
+./knife/system.lua    40   0      100.00%
+./knife/test.lua      61   0      100.00%
+./knife/timer.lua     125  0      100.00%
+./spec/base.lua       39   0      100.00%
+./spec/behavior.lua   43   0      100.00%
+./spec/bind.lua       22   0      100.00%
+./spec/chain.lua      48   0      100.00%
+./spec/convoke.lua    60   0      100.00%
+./spec/event.lua      70   0      100.00%
+./spec/memoize.lua    111  0      100.00%
+./spec/serialize.lua  33   0      100.00%
+./spec/system.lua     83   0      100.00%
+./spec/test.lua       42   0      100.00%
+./spec/timer.lua      80   0      100.00%
+------------------------------------------
+Total                 1096 0      100.00%

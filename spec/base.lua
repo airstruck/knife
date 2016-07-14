@@ -1,24 +1,24 @@
 local function checkSubSuper (T, Sub, Super)
-  T:assert(getmetatable(Sub).__index == Super, 
+  T:assert(getmetatable(Sub).__index == Super,
   'Then the super is the index for the sub')
   T:assert(Sub ~= Super,
   'Then the super is not identical to the sub')
 end
 
 local function checkNotCallable (T, instance)
-  T:error(function () instance() end, 
+  T:error(function () instance() end,
   'Then the instance is not callable')
 end
 
 local function checkConstruct (T, Class)
-  T('When instantiated with the default constructor', 
+  T('When instantiated with the default constructor',
   function (T)
     Class.constructor = nil
     local c = Class()
     checkSubSuper(T, c, Class)
     checkNotCallable (T, c)
   end)
-  T('When instantiated with a custom constructor', 
+  T('When instantiated with a custom constructor',
   function (T)
     function Class:constructor (x) self.x = x; return x, 45 end
     local c, x, y = Class(123)
@@ -32,7 +32,7 @@ local function checkConstruct (T, Class)
 end
 
 local function checkExtend (T, Class)
-  T('When a class is extended', 
+  T('When a class is extended',
   function (T)
     local Sub = Class:extend()
     checkSubSuper(T, Sub, Class)
@@ -40,17 +40,17 @@ local function checkExtend (T, Class)
   end)
 end
 
-T('Given a base class', 
+T('Given a base class',
 function (T)
   local Base = require 'knife.base'
-  T('When the base class is extended with no arguments', 
+  T('When the base class is extended with no arguments',
   function (T)
     local Thing = Base:extend()
     checkSubSuper(T, Thing, Base)
     checkConstruct(T, Thing)
     checkExtend (T, Thing)
   end)
-  T('When the base class is extended with a table argument', 
+  T('When the base class is extended with a table argument',
   function (T)
     local t = { x = 1 }
     local Thing = Base:extend(t)
@@ -61,4 +61,3 @@ function (T)
     checkExtend (T, Thing)
   end)
 end)
-
