@@ -113,7 +113,7 @@ The API consists of a single function named `System`.
   An aspect may be prefixed with `=` to indicate that it demands a return value.
   The `process` function should return one value for each aspect prefixed with
   `=` (even if the value has not changed). The returned values are used to
-  update the corresponding components, allows systems to mutate components
+  update the corresponding components, allowing systems to mutate components
   with primitive values. This sigil cannot be combined with pipe-delimited
   choices.
 
