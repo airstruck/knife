@@ -11,7 +11,7 @@ local function buildHelper (argCount)
     for index = 1, argCount do
         argList[index] = 'a' .. index
     end
-    local sep = argCount > 0 and ", " or ""
+    local sep = argCount > 0 and ', ' or ''
     local source = 'return function(f' .. sep .. tconcat(argList, ', ') ..
         ') return function(...) return f(' .. tconcat(argList, ', ') ..
         sep .. '...) end end'
