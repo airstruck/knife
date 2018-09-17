@@ -7,16 +7,14 @@ local function buildHelper (argCount)
     if helperCache[argCount] then
         return helperCache[argCount]
     end
-    local argList1 = { 'f' }
-    local argList2 = {}
+    local argList = {}
     for index = 1, argCount do
-        argList1[index + 1] = 'a' .. index
-        argList2[index] = 'a' .. index
+        argList[index] = 'a' .. index
     end
-    argList2[argCount + 1] = '...'
-    local source = 'return function(' .. tconcat(argList1, ', ') ..
-        ') return function(...) return f(' .. tconcat(argList2, ', ') ..
-        ') end end'
+    local sep = (argCount>=1 and ", " or "")
+    local source = 'return function(f'.. sep .. tconcat(argList, ', ') ..
+        ') return function(...) return f(' .. tconcat(argList, ', ') ..
+        sep .. '...) end end'
     local helper = loadstring(source)()
     helperCache[argCount] = helper
     return helper
